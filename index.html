@@ -350,6 +350,19 @@
   }
   :focus:not(:focus-visible) { outline: none; }
 
+  .skip-link {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 10000;
+    transform: translateY(-200%);
+    padding: 10px 14px;
+    background: var(--text);
+    color: var(--bg);
+    border-radius: 4px;
+  }
+  .skip-link:focus { transform: translateY(0); }
+
   ::selection { background: var(--accent); color: var(--bg); }
 
   body {
@@ -1731,6 +1744,8 @@
 </head>
 <body>
 
+<a class="skip-link" href="#main">Skip to main content</a>
+
 <div id="scroll-progress" aria-hidden="true"></div>
 <div class="grain" aria-hidden="true"></div>
 
@@ -1795,6 +1810,7 @@
   </div>
 </div>
 
+<main id="main">
 <!-- HERO -->
 <section class="hero" id="home" aria-labelledby="hero-heading">
   <div class="hero-inner">
@@ -3139,6 +3155,7 @@
     </details>
   </div>
 </section>
+</main>
 
 <button id="back-to-top" aria-label="Back to top"></button>
 
