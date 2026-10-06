@@ -112,3 +112,36 @@ def test_proxy_hints_correction_adds_p_adjusted_and_is_stricter():
     assert len(strict) <= len(proxy_hints(df, dims, alpha=0.05))
     with pytest.raises(ValueError, match="correction"):
         proxy_hints(df, dims, correction="nope")
+
+
+@pytest.mark.parametrize("p_values,method,expected", [
+    # m == 1: adjusted equals raw
+    ([0.03], "bonferroni", [0.03]),
+    ([0.03], "holm", [0.03]),
+    # m == 0 (empty): returns empty list
+    ([], "bonferroni", []),
+    ([], "holm", []),
+    # Ties: two identical p-values break ties with stable order
+    ([0.02, 0.02, 0.04], "bonferroni", [0.06, 0.06, 0.12]),
+    ([0.02, 0.02, 0.04], "holm", [0.06, 0.06, 0.06]),
+    ([0.05, 0.01, 0.01, 0.03], "bonferroni", [0.20, 0.04, 0.04, 0.12]),
+    ([0.05, 0.01, 0.01, 0.03], "holm", [0.06, 0.04, 0.04, 0.06]),
+])
+def test_adjust_p_values_ties_m_equals_1_and_empty(p_values, method, expected):
+    """#820: parameterised cases for Holm/Bonferroni tie handling, m == 1, and empty lists."""
+    from faircode.proxy import adjust_p_values
+
+    assert adjust_p_values(p_values, method) == pytest.approx(expected)
+
+
+def test_proxy_hints_correction_empty_tested_pairs_on_constant_columns():
+    """#820: constant columns yield an empty set of tested pairs without error."""
+    pytest.importorskip("scipy")
+    from faircode.detect import detect_columns
+    from faircode.proxy import proxy_hints
+
+    df = pd.DataFrame({"sex": ["male"] * 20, "race": ["group_a"] * 20})
+    dims = [{"name": d["name"], "kind": d["kind"]} for d in detect_columns(df)]
+    assert proxy_hints(df, dims, correction="holm") == []
+    assert proxy_hints(df, dims, correction="bonferroni") == []
+

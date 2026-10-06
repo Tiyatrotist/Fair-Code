@@ -1393,7 +1393,8 @@
                               // Opt-in, informational only (issue #738) - see
                               // proxyHints()'s own comment for why this is
                               // kept out of profile()/compare().
-                              proxyHints: proxyHints, parseHeldOut: parseHeldOut, buildHeldOut: buildHeldOut,
+                              proxyHints: proxyHints, adjustPValues: adjustPValues,
+                              parseHeldOut: parseHeldOut, buildHeldOut: buildHeldOut,
                               csvField: csvField, csvRow: csvRow, provenanceCsv: provenanceCsv,
                               // publicParams: resolved knobs for an export's
                               // provenance.params, matching the Python path (#490).
