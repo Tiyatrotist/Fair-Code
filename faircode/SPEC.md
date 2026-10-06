@@ -455,7 +455,8 @@ The first three tools accept `overrides` (the section 1 `{column: kind}` map, as
 than repeated `--map COL=KIND` strings) and the relevant section 7 thresholds by name.
 `profile_dataset` also accepts `cross` and `reference_path`, matching `profile`'s `--cross` and
 `--reference`; `compare_datasets` does not, matching `compare`'s own flag set. `proxy_hints` takes no
-threshold parameters at all - only `path`, `overrides`, and `held_out_with` - since it only surfaces
+section 7 threshold parameters at all - only `path`, `overrides`, `held_out_with`, and the proxy-test
+`alpha`/`correction` (below) - since it only surfaces
 candidate proxy pairs for a human/agent to review, not a scored or filtered result the section 7
 thresholds would narrow.
 
@@ -479,6 +480,16 @@ dataset entirely - unless `held_out_with` is given: a list of `"PATH=COLUMN"` st
 CLI's `--proxy-hints-with`, each naming a file whose rows align 1:1 with the profiled dataset and a
 column to pull the dropped attribute's original values from. Parsed via `proxy.py`'s shared
 `parse_held_out_specs`, so the validation is identical to the CLI's. See section 3 and issue #328.
+
+The proxy-test and output parameters below are all optional. An invalid value is raised as a
+`ValueError`, so it reaches the agent as a `ToolError` carrying the message shown.
+
+| Parameter | Tools | Default | Behaviour and errors |
+|-----------|-------|---------|----------------------|
+| `alpha` | `proxy_hints`, `compare_datasets` | `null` (0.05) | Proxy-hint significance level, mirroring `--proxy-alpha` (section 3). A value outside `(0, 1]` raises `alpha must be in (0, 1], got ...`. On `compare_datasets` it is only read when `proxy_hints=true` |
+| `correction` | `proxy_hints`, `compare_datasets` | `null` (no correction) | `"bonferroni"` or `"holm"`, mirroring `--proxy-correction` (section 3): a pair is reported only when its adjusted p is below `alpha`, and each hint gains `p_adjusted`. Any other value raises `correction must be one of ('bonferroni', 'holm'), got ...`. On `compare_datasets` it is only read when `proxy_hints=true` |
+| `held_out_with_a` / `held_out_with_b` | `compare_datasets` | `null` | Lists of `"PATH=COLUMN"` strings testing a column already dropped from dataset A / B, mirroring `--proxy-hints-with-a`/`-b`. Parsed by `parse_held_out_specs` with the same validation as `held_out_with`, error messages naming the parameter. Given without `proxy_hints=true`, raises `held_out_with_a/held_out_with_b need proxy_hints=true` |
+| `format` | `profile_dataset`, `compare_datasets` | `"json"` | `"json"` returns the result unchanged; `"csv"` returns `{"csv": "<text>"}`, the same text `profile --csv` / `compare --csv` writes (section 12), with its provenance section unless `include_provenance=false`. Any other value raises `format must be 'json' or 'csv', got ...` |
 
 `list_explainers`/`get_explainer`/`get_benchmark_results` carry no dataset-reading trust boundary at
 all - they only read this repo's own files, never a caller-supplied path - and use the same
