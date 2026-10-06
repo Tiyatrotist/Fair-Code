@@ -1039,6 +1039,16 @@ Point a client at it with:
 included by default. See [faircode/SPEC.md](faircode/SPEC.md#11-mcp-tools) for the full tool
 contract.
 
+Optional parameters (defaults and errors in [SPEC.md section 11](faircode/SPEC.md#11-mcp-tools);
+CSV layout in [section 12](faircode/SPEC.md#12-csv-export)):
+
+| Parameter | Tools | What it does |
+|-----------|-------|--------------|
+| `alpha` | `proxy_hints`, `compare_datasets` | Proxy-hint significance level, default 0.05, must be in `(0, 1]` (CLI `--proxy-alpha`) |
+| `correction` | `proxy_hints`, `compare_datasets` | `"bonferroni"` or `"holm"` multiple-comparison correction; adds `p_adjusted` to each hint (CLI `--proxy-correction`) |
+| `held_out_with_a` / `held_out_with_b` | `compare_datasets` | `"PATH=COLUMN"` lists testing a column already dropped from dataset A / B; need `proxy_hints=true` (CLI `--proxy-hints-with-a`/`-b`) |
+| `format` | `profile_dataset`, `compare_datasets` | `"json"` (default) or `"csv"`, which returns `{"csv": "..."}`, the same text `--csv` writes |
+
 The engine is domain-agnostic - it works on any tabular CSV (health, hiring, lending, justice),
 auto-detecting demographic columns (sex, race, age, geography) by name. Beyond the single-dataset
 audit it can **compare two datasets** for representation drift (`compare`, web A/B dropzones,
