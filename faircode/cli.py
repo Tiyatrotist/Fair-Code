@@ -140,14 +140,16 @@ def _compare_provenance(args, opts, overrides):
         _resolve_opts(opts), overrides)
 
 
-def _write_csv_export(path, text):
+def _write_csv_export(path, text, bom=False):
     """Write a --csv export to PATH, or to stdout when PATH is "-" (#779).
     Returns True on failure (after printing the error), like the other writers."""
     if path == "-":
+        if bom:
+            sys.stdout.write("\ufeff")
         sys.stdout.write(text)
         return False
     try:
-        with open(path, "w", encoding="utf-8", newline="") as fh:
+        with open(path, "w", encoding="utf-8-sig" if bom else "utf-8", newline="") as fh:
             fh.write(text)
     except OSError as exc:
         print(f"error: could not write CSV export to {path}: {exc}", file=sys.stderr)

@@ -188,6 +188,72 @@ def test_python_js_profiler_parity_detects_dates_appended_after_numeric_ages(tmp
     assert all(dim["name"] != "age" for dim in python_result["dimensions"])
 
 
+def test_python_js_profiler_parity_handles_scientific_and_nonfinite_ages(tmp_path):
+    """Scientific notation follows pandas' numeric inference; inf/nan stay missing."""
+    csv = tmp_path / "scientific-and-nonfinite-ages.csv"
+    csv.write_text(
+        "age,sex\n"
+        "1e2,F\n"
+        "25,M\n"
+        "40,F\n"
+        "60,M\n"
+        "inf,F\n"
+        "nan,M\n",
+        encoding="utf-8",
+    )
+
+    python_result = profile(pd.read_csv(csv))
+    completed = subprocess.run(
+        ["node", "scripts/engine-js.js", "profile", str(csv)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    )
+    javascript_result = json.loads(completed.stdout)
+
+    python_result = dict(python_result)
+    javascript_result = dict(javascript_result)
+    python_result.pop("flags", None)
+    javascript_result.pop("flags", None)
+
+    assert javascript_result == python_result
+    age = next(d for d in python_result["dimensions"] if d["name"] == "age")
+    labels = {group["label"] for group in age["groups"]}
+    assert "75+" in labels
+    assert "inf" not in labels
+    assert "nan" not in labels
+    assert age["missing_pct"] == 0.3333
+
+
+def test_python_js_profiler_handles_overflowing_scientific_age_as_missing(tmp_path):
+    """A value such as 1e400 parses to Infinity in JS and must not become an age group."""
+    csv = tmp_path / "overflow-age.csv"
+    csv.write_text(
+        "age\n"
+        "25\n"
+        "40\n"
+        "60\n"
+        "1e400\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        ["node", "scripts/engine-js.js", "profile", str(csv)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    )
+    javascript_result = json.loads(completed.stdout)
+    age = next(d for d in javascript_result["dimensions"] if d["name"] == "age")
+    labels = {group["label"] for group in age["groups"]}
+
+    assert "inf" not in labels
+    assert "1e400" not in labels
+    assert age["missing_pct"] == 0.25
+
+
 def test_python_js_profiler_parity_rejects_negative_age_sentinels(tmp_path):
     """Signed sentinel ages stay missing in both profiler engines."""
     csv = tmp_path / "negative-age-sentinels.csv"
@@ -1039,6 +1105,44 @@ def test_python_js_proxy_correction_parity(tmp_path):
     assert adjust_p_values([0.01, 0.04, 0.03], "holm") == pytest.approx([0.03, 0.06, 0.06])
 
 
+def test_adjust_p_values_js_parity_ties_and_edge_cases():
+    """#820: verify that JS adjustPValues exactly matches Python adjust_p_values
+    for ties (breaking ties stably in input order), single tested pair (m=1), and empty input (m=0)."""
+    from faircode.proxy import adjust_p_values
+
+    cases = [
+        ([], "bonferroni"),
+        ([], "holm"),
+        ([0.042], "bonferroni"),
+        ([0.042], "holm"),
+        ([0.8], "bonferroni"),
+        ([0.8], "holm"),
+        ([0.02, 0.02, 0.04], "holm"),
+        ([0.05, 0.01, 0.01, 0.03], "holm"),
+        ([0.03, 0.03], "bonferroni"),
+        ([0.03, 0.03], "holm"),
+        ([0.1, 0.1, 0.1], "holm"),
+        ([0.01, 0.04, 0.03], "bonferroni"),
+        ([0.01, 0.04, 0.03], "holm"),
+    ]
+
+    script = (
+        "require(process.argv[1]);var E=globalThis.FairCodeProfiler;"
+        "var cases=JSON.parse(process.argv[2]);"
+        "var results=cases.map(function(c){return E.adjustPValues(c[0],c[1]);});"
+        "process.stdout.write(JSON.stringify(results));"
+    )
+    done = subprocess.run(
+        ["node", "-e", script, str(REPO_ROOT / "assets" / "profiler-engine.js"), json.dumps(cases)],
+        capture_output=True, text=True, encoding="utf-8", check=True
+    )
+    js_results = json.loads(done.stdout)
+    for (ps, method), js_res in zip(cases, js_results):
+        py_res = adjust_p_values(ps, method)
+        assert js_res == pytest.approx(py_res), f"Mismatch for {ps} with {method}: JS={js_res}, PY={py_res}"
+
+
+
 def test_web_csv_includes_the_reference_section_like_python(tmp_path):
     """#805: after scoring against a reference baseline, the browser CSV carries
     the same expected/actual/delta/deviation section as faircode's to_csv()."""
@@ -1151,6 +1255,9 @@ def test_held_out_control_adds_rows_collects_specs_and_validates():
       inputs(1)[1].value='';
       container.children[2].children[2].click();       // remove row 3
       out.rows_after_remove=container.children.length;
+      ctl.reset();
+      out.rows_after_reset=container.children.length;
+      out.specs_after_reset=await ctl.collect();
       process.stdout.write(JSON.stringify(out));
     })();
     """
@@ -1163,3 +1270,5 @@ def test_held_out_control_adds_rows_collects_specs_and_validates():
                             {"name": "b.xlsx", "column": "age", "data": "AB:b.xlsx"}]
     assert "needs both a file and a column name" in out["half"]
     assert out["rows_after_remove"] == 2
+    assert out["rows_after_reset"] == 1 and out["specs_after_reset"] == []
+
