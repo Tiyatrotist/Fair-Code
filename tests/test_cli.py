@@ -1177,3 +1177,20 @@ def test_csv_provenance_needs_csv_and_covers_compare(tmp_path, capsys):
     assert main(["compare", str(path), str(path), "--csv", str(out), "--csv-provenance"]) == 0
     text = out.read_text(encoding="utf-8")
     assert "dataset_hash_a" in text and "dataset_hash_b" in text
+
+
+def test_profile_nested_json_flattens_and_profiles(tmp_path, capsys):
+    # Issue #844: nested JSON records previously crashed with a raw traceback
+    # due to TypeError: unhashable type: 'dict'.
+    path = tmp_path / "nested.json"
+    path.write_text(
+        '[{"sex":"M","loc":{"state":"TX"}},{"sex":"F","loc":{"state":"CA"}}]',
+        encoding="utf-8",
+    )
+    exit_code = main(["profile", str(path)])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Representation score:" in captured.out
+    assert "sex" in captured.out
+    assert "loc.state" in captured.out
+

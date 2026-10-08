@@ -97,7 +97,12 @@ def detect_columns(df, overrides=None, max_categorical_card: int = MAX_CATEGORIC
             continue
         # Generic categorical fallback for low-cardinality columns.
         series = df[col].dropna()
-        n_unique = series.nunique()
+        try:
+            n_unique = series.nunique()
+        except TypeError:
+            # Columns containing unhashable objects (e.g. dicts or lists)
+            # cannot form categorical groups (#844).
+            continue
         if 2 <= n_unique <= max_categorical_card:
             detected.append({"name": col, "kind": "categorical"})
     return detected
