@@ -23,6 +23,8 @@ that is what the `unfair.py` / `fair.py` audits do. The Profiler answers a diffe
 
 ## 1. Column auto-detection
 
+Repeated header names are made unique the way pandas does (`name`, `name.1`, `name.2`, ... skipping names already taken) before anything else; the browser parser does the same so two same-named columns are two dimensions, never one overwriting the other (#834).
+
 **Tokenize** the column name: split on separators **and** camelCase boundaries, then lower-case.
 `DateOfBirth → [date, of, birth]`, `Sex_Code_Text → [sex, code, text]`, `ageGroup → [age, group]`.
 Token boundaries are what stop `age` from matching `Agency_Text` or `Language`.
@@ -66,6 +68,8 @@ editable per-column dropdowns in the web profiler.
 ## 2. Age normalization
 
 Age columns come in three shapes - normalize to numeric bands:
+
+(Digits mean ASCII `0-9` only in both engines. Python's `\d` and the browser's `\d` disagree about Arabic-Indic or fullwidth digits, so a value written with them is *not* a number: it falls into the categorical branch below, identically in Python and JS - #836.)
 
 - **Non-negative numeric** (e.g. `34`): use directly.
 - **Interval string** (e.g. `[70-80)`): take the lower bound via the first signed number.

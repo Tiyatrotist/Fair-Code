@@ -25,7 +25,9 @@ DATE_SAMPLE_SIZE = 200  # deterministic whole-column sample for date detection
 MAX_DIMENSION_GROUPS = 50  # drop identifier/date-like columns (geography exempt)
 MIN_GROUP_SIZE = 100  # warn when a subgroup has fewer than N rows (default: 100)
 
-_DATE_RE = re.compile(r"\d{1,4}[/-]\d{1,2}[/-]\d{1,4}")
+# ASCII digits only, like the JS engine (#836): Python's `\d` also matches
+# Arabic-Indic/fullwidth digits, which the browser regex does not.
+_DATE_RE = re.compile(r"[0-9]{1,4}[/-][0-9]{1,2}[/-][0-9]{1,4}")
 
 # 95% two-sided normal quantile, shared verbatim with the JS port so both engines
 # return identical Wilson bounds (SPEC section 3).
@@ -139,7 +141,7 @@ def _age_to_numeric(value):
     if isinstance(value, (int, float)):
         numeric = float(value)
     else:
-        match = re.search(r"[+-]?\d+(?:\.\d+)?", str(value))
+        match = re.search(r"[+-]?[0-9]+(?:\.[0-9]+)?", str(value))
         if match is None:
             return None
         numeric = float(match.group())
@@ -158,7 +160,7 @@ def _is_categorical_age_sentinel(value) -> bool:
     test_negative_age_sentinels_are_missing_instead_of_an_elderly_group)."""
     if value is None or isinstance(value, (int, float)):
         return False
-    return re.search(r"[+-]?\d+(?:\.\d+)?", str(value)) is None
+    return re.search(r"[+-]?[0-9]+(?:\.[0-9]+)?", str(value)) is None
 
 
 def _age_band(num) -> str | None:

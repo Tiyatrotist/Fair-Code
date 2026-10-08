@@ -1272,3 +1272,37 @@ def test_held_out_control_adds_rows_collects_specs_and_validates():
     assert out["rows_after_remove"] == 2
     assert out["rows_after_reset"] == 1 and out["specs_after_reset"] == []
 
+
+
+@pytest.mark.parametrize("name,text", [
+    ("duplicate_headers", "sex,sex,race\nM,F,A\nM,F,B\nM,F,A\nF,M,B\n"),
+    ("duplicate_headers_colliding_suffix", "a,a,a,a.1\n1,2,3,4\n"),
+    ("quoted_empty_single_column_row", 'region\r\n""\r\nN\r\nS\r\n'),
+    ("quoted_empty_last_line", 'region\r\nN\r\n""'),
+    ("non_ascii_digit_ages", "age\n٣٠\n25\n40\n٣٠\n"),
+])
+def test_python_js_parity_on_parser_edge_cases(tmp_path, name, text):
+    """#834 (pandas-style header de-duplication), #835 (a quoted-empty row is a
+    missing value, not a blank line) and #836 (only ASCII digits are ages):
+    the CSV parsers and the profile of the result agree on each."""
+    path = tmp_path / f"{name}.csv"
+    path.write_text(text, encoding="utf-8", newline="")
+    df = pd.read_csv(path)
+    script = (
+        "require(process.argv[1]);var fs=require('fs');"
+        "var t=globalThis.FairCodeProfiler.parseCSV(fs.readFileSync(process.argv[2],'utf-8'));"
+        "process.stdout.write(JSON.stringify({columns:t.columns,n:t.rows.length}));"
+    )
+    parsed = json.loads(subprocess.run(
+        ["node", "-e", script, str(REPO_ROOT / "assets" / "profiler-engine.js"), str(path)],
+        capture_output=True, text=True, encoding="utf-8", check=True).stdout)
+    assert parsed["columns"] == list(df.columns)
+    assert parsed["n"] == len(df)
+
+    js = json.loads(subprocess.run(
+        ["node", "scripts/engine-js.js", "profile", str(path)],
+        capture_output=True, text=True, encoding="utf-8", check=True).stdout)
+    py = dict(profile(df))
+    js.pop("flags", None)
+    py.pop("flags", None)
+    assert js == py

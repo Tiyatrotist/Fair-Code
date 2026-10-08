@@ -128,7 +128,7 @@
                    'county', 'city', 'location', 'province']]
   ];
 
-  var DATE_RE = /\d{1,4}[/-]\d{1,2}[/-]\d{1,4}/;
+  var DATE_RE = /[0-9]{1,4}[/-][0-9]{1,2}[/-][0-9]{1,4}/;
 
   // ── Delimiter sniffing (SPEC-adjacent; mirrors faircode/loaders.py) ─────
   // Picks whichever of , \t ; | appears the same number of times on every
@@ -184,10 +184,30 @@
 
   // ── CSV/TSV parsing ──────────────────────────────────────────────────────
   // Handles quoted fields, escaped quotes (""), and newlines inside quotes.
+  // pandas renames a repeated header to name.1, name.2, ... (skipping any name
+  // already taken); without this the second copy overwrote the first in every
+  // row object and both dimensions read the LAST column's values (#834).
+  function dedupeHeaders(columns) {
+    var used = Object.create(null), seen = Object.create(null);
+    columns.forEach(function (c) { used[c] = (used[c] || 0) + 1; });
+    var taken = Object.create(null);
+    return columns.map(function (c) {
+      if (!taken[c]) { taken[c] = true; return c; }
+      var n = (seen[c] || 0) + 1, candidate = c + '.' + n;
+      while (used[candidate] || taken[candidate]) { n++; candidate = c + '.' + n; }
+      seen[c] = n;
+      taken[candidate] = true;
+      return candidate;
+    });
+  }
+
   function parseCSV(text, delimiter) {
     if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // strip BOM
     delimiter = delimiter || sniffDelimiter(text);
     var rows = [], field = '', row = [], inQuotes = false;
+    // A row made of one quoted empty field ("") is a real missing value to
+    // pandas, not a blank line to skip (#835).
+    var rowQuoted = false;
     for (var i = 0; i < text.length; i++) {
       var c = text[i];
       if (inQuotes) {
@@ -197,19 +217,21 @@
         } else field += c;
       } else if (c === '"' && field === '') {
         inQuotes = true;
+        rowQuoted = true;
       } else if (c === delimiter) {
         row.push(field); field = '';
       } else if (c === '\n' || c === '\r') {
         if (c === '\r' && text[i + 1] === '\n') i++;
         row.push(field); field = '';
-        if (row.length > 1 || row[0] !== '') rows.push(row);
+        if (row.length > 1 || row[0] !== '' || rowQuoted) rows.push(row);
         row = [];
+        rowQuoted = false;
       } else field += c;
     }
-    if (field !== '' || row.length) { row.push(field); rows.push(row); }
+    if (field !== '' || row.length || rowQuoted) { row.push(field); rows.push(row); }
     if (!rows.length) return { columns: [], rows: [] };
 
-    var columns = rows[0];
+    var columns = dedupeHeaders(rows[0]);
     var data = [];
     for (var r = 1; r < rows.length; r++) {
       var obj = {};
@@ -492,7 +514,7 @@
   // Match the numeric grammar used by pandas when it infers an otherwise
   // numeric age column, including scientific notation. Non-finite numeric
   // tokens (inf/nan) are treated as missing rather than categorical values.
-  var AGE_NUMERIC_RE = /[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/;
+  var AGE_NUMERIC_RE = /[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?/;
   var AGE_NONFINITE_RE = /^[+-]?(?:inf(?:inity)?|nan)$/i;
 
   function ageToNumeric(value) {
