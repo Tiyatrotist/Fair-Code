@@ -118,6 +118,10 @@ def _build_held_out(specs, df):
         raise SystemExit(2)
 
 
+def _lower_first(text: str) -> str:
+    return text[:1].lower() + text[1:]
+
+
 def _alpha(args):
     from .proxy import PROXY_ALPHA
     return PROXY_ALPHA if args.proxy_alpha is None else args.proxy_alpha
@@ -447,7 +451,8 @@ def main(argv: list[str] | None = None) -> int:
             print(to_terminal(result))
         if args.fail_under is not None and result["overall_score"] is None:
             print(
-                "error: cannot apply --fail-under: no demographic columns detected",
+                "error: cannot apply --fail-under: " + _lower_first(
+                    (result["note"] or "the dataset could not be measured").rstrip(".")),
                 file=sys.stderr,
             )
             return 2

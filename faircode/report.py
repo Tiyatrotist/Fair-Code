@@ -73,6 +73,12 @@ def _write_provenance_rows(writer, provenance: dict) -> None:
         writer.writerow([key, value])
 
 
+def _dim_score_text(d: dict) -> str:
+    """A dimension with no groups was not measured; its stored score of 0 is a
+    placeholder, so show "not measured" rather than a failing 0/100 (#838)."""
+    return "not measured" if d["n_groups"] == 0 else f"{d['dimension_score']}/100"
+
+
 def _adj_text(h) -> str:
     """", adj p=..." suffix for a hint that carries a multiple-comparison
     adjusted p-value (#806); empty for the default uncorrected hints."""
@@ -165,7 +171,7 @@ def to_terminal(result: dict) -> str:
     for d in result["dimensions"]:
         add("-" * WIDTH)
         title = f"{d['name']}  [{d['kind']}]"
-        add(f"{title}    score {d['dimension_score']}/100")
+        add(f"{title}    score {_dim_score_text(d)}")
         add("-" * WIDTH)
         shown = d["groups"][:DISPLAY_GROUPS]
         for g in shown:
@@ -437,7 +443,7 @@ def to_html(result: dict) -> str:
         dim_blocks.append(
             f'<section class="dim"><h2>{esc(d["name"])} '
             f'<span class="kind">{esc(d["kind"])}</span> '
-            f'<span class="score">{d["dimension_score"]}/100</span>{meta_html}</h2>'
+            f'<span class="score">{_dim_score_text(d)}</span>{meta_html}</h2>'
             f'<table><caption>Group breakdown - {esc(d["name"])}</caption>'
             f'<thead><tr><th scope="col">Group</th><th scope="col" class="num">Share</th>'
             f'<th scope="col" class="num">95% CI</th><th scope="col" class="num">Count</th>'

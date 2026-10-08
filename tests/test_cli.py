@@ -1177,3 +1177,26 @@ def test_csv_provenance_needs_csv_and_covers_compare(tmp_path, capsys):
     assert main(["compare", str(path), str(path), "--csv", str(out), "--csv-provenance"]) == 0
     text = out.read_text(encoding="utf-8")
     assert "dataset_hash_a" in text and "dataset_hash_b" in text
+
+
+def test_fail_under_error_explains_a_header_only_file_truthfully(tmp_path, capsys):
+    """#839: columns WERE detected; what is missing is data, and the error says so."""
+    path = tmp_path / "hdr.csv"
+    path.write_text("sex,race\n", encoding="utf-8")
+    assert main(["profile", str(path), "--fail-under", "50"]) == 2
+    err = capsys.readouterr().err
+    assert "no dimension had any non-missing values to measure" in err
+    assert "no demographic columns" not in err
+
+
+def test_header_only_file_shows_not_measured_not_zero_per_dimension(tmp_path, capsys):
+    """#838: a dimension with no groups is "not measured", never "score 0/100"."""
+    path = tmp_path / "hdr.csv"
+    path.write_text("sex,race\n", encoding="utf-8")
+    assert main(["profile", str(path)]) == 0
+    out = capsys.readouterr().out
+    assert "score not measured" in out and "score 0/100" not in out
+    html = tmp_path / "r.html"
+    assert main(["profile", str(path), "--html", str(html)]) == 0
+    text = html.read_text(encoding="utf-8")
+    assert "not measured" in text and "0/100" not in text

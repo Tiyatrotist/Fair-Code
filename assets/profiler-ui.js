@@ -225,6 +225,9 @@
     return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
+  // A dimension with no groups was not measured; its stored 0 is a placeholder (#838).
+  function dimScoreText(d) { return d.n_groups === 0 ? 'not measured' : d.dimension_score + '/100'; }
+
   function pct(x) { return (x * 100).toFixed(1) + '%'; }
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (c) {
@@ -303,7 +306,7 @@
 
     var head = '<div class="dim-head"><div><span class="dim-name">' + esc(d.name) +
       '</span><span class="dim-kind">' + esc(d.kind) + '</span></div>' +
-      '<span class="dim-score">' + d.dimension_score + '/100</span></div>';
+      '<span class="dim-score">' + dimScoreText(d) + '</span></div>';
 
     var maxShare = d.groups.length ? d.groups[0].share : 1;
     function barRow(g) {
@@ -764,7 +767,7 @@
 
       return '<section class="dim"><h2>' + esc(d.name) +
         ' <span class="kind">' + esc(d.kind) + '</span> ' +
-        '<span class="score">' + d.dimension_score + '/100</span>' + metaHtml + '</h2>' +
+        '<span class="score">' + dimScoreText(d) + '</span>' + metaHtml + '</h2>' +
         '<table>' + rows + '</table>' + moreHtml + referenceHtml + '</section>';
     }).join('');
 
