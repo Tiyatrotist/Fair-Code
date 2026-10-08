@@ -45,7 +45,7 @@ def test_identical_datasets_show_no_drift():
     assert dim["psi"] == 0.0
     assert dim["tvd"] == 0.0
     assert dim["drift_level"] == "none"
-    assert all(g["status"] == "shifted" and g["share_delta"] == 0.0
+    assert all(g["status"] == "unchanged" and g["share_delta"] == 0.0
                for g in dim["groups"])
     assert cmp["flags"] == []
 
