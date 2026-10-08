@@ -283,7 +283,7 @@ def compare_to_terminal(cmp: dict) -> str:
         add("-" * WIDTH)
         for g in cd["groups"][:DISPLAY_GROUPS]:
             tag = {"appeared": "  (appeared)", "disappeared": "  (disappeared)",
-                   "shifted": ""}[g["status"]]
+                   "shifted": "", "unchanged": ""}[g["status"]]
             add(f"  {g['label'][:18]:<18} {g['share_a'] * 100:5.1f}% → "
                 f"{g['share_b'] * 100:5.1f}%  "
                 f"({_strip_neg_zero(g['share_delta'] * 100):+5.1f} pp){tag}")

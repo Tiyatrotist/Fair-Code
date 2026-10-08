@@ -1283,10 +1283,12 @@
       var a = sa[label] || 0, b = sb[label] || 0;
       psiTotal += psiTerm(a, b);
       tvdTotal += Math.abs(b - a);
+      var delta = round(b - a, 4);
       var status = (a === 0 && b > 0) ? 'appeared'
-                 : (a > 0 && b === 0) ? 'disappeared' : 'shifted';
+                 : (a > 0 && b === 0) ? 'disappeared'
+                 : (delta === 0) ? 'unchanged' : 'shifted';
       groups.push({ label: String(label), share_a: round(a, 4),
-                    share_b: round(b, 4), share_delta: round(b - a, 4),
+                    share_b: round(b, 4), share_delta: delta,
                     status: status });
     });
     // most-shifted first, then label asc - matches Python.
