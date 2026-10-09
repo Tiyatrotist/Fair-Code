@@ -306,3 +306,25 @@ def test_cli_encoding_flag_and_decode_error_hint(tmp_path, capsys):
     with pytest.raises(SystemExit):
         main(["profile", str(path), "--encoding", "nope-9"])
     assert "unknown --encoding" in capsys.readouterr().err
+
+
+def test_read_table_json_honours_encoding_and_bom(tmp_path):
+    """#843 follow-up: .json used to be decoded as UTF-8 whatever --encoding said."""
+    rows = [{"sex": "M", "race": "Café"}, {"sex": "F", "race": "Señor"}]
+    text = json.dumps(rows, ensure_ascii=False)
+
+    latin = tmp_path / "latin.json"
+    latin.write_bytes(text.encode("latin-1"))
+    assert list(read_table(str(latin), encoding="latin-1")["race"]) == ["Café", "Señor"]
+    with pytest.raises(UnicodeDecodeError):
+        read_table(str(latin))
+
+    for codec in ("utf-16", "utf-8-sig"):
+        bom = tmp_path / f"{codec}.json"
+        bom.write_bytes(text.encode(codec))
+        assert list(read_table(str(bom))["race"]) == ["Café", "Señor"]
+
+    split = tmp_path / "split.json"
+    split.write_bytes(json.dumps({"columns": ["race"], "data": [["Café"], ["Señor"]]},
+                                 ensure_ascii=False).encode("latin-1"))
+    assert list(read_table(str(split), encoding="latin-1")["race"]) == ["Café", "Señor"]

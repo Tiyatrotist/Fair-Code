@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .loaders import SNIFF_SAMPLE_BYTES, _sniff_delimiter, sniff_bom_encoding
+from .loaders import SNIFF_SAMPLE_BYTES, _sniff_delimiter, resolve_encoding, sniff_bom_encoding
 from .loaders import read_table as _read_table_frozen
 
 
@@ -38,7 +38,8 @@ def read_table(path: str, encoding: str | None = None) -> pd.DataFrame:
     suffix = Path(path).suffix.lower()
 
     if suffix == ".json":
-        with open(path, "r", encoding="utf-8") as f:
+        encoding = resolve_encoding(path, encoding)
+        with open(path, "r", encoding=encoding) as f:
             raw = f.read()
 
         try:
@@ -56,7 +57,7 @@ def read_table(path: str, encoding: str | None = None) -> pd.DataFrame:
         # below because columns-oriented JSON is also represented as a
         # dictionary of dictionaries.
         if isinstance(parsed, dict) and {"columns", "data"} <= parsed.keys():
-            return pd.read_json(path, orient="split")
+            return pd.read_json(path, orient="split", encoding=encoding)
 
         # Detect table-orient JSON: {"schema": {...}, "data": [...]} - a
         # real, valid pandas export (the only orientation that round-trips
@@ -65,7 +66,7 @@ def read_table(path: str, encoding: str | None = None) -> pd.DataFrame:
         # non-Series may lead to ambiguous ordering" error instead of a clear
         # one.
         if isinstance(parsed, dict) and {"schema", "data"} <= parsed.keys():
-            return pd.read_json(path, orient="table")
+            return pd.read_json(path, orient="table", encoding=encoding)
 
         # Detect index/columns-oriented JSON: a dict whose every top-level
         # value is itself a dict of scalars.
@@ -100,7 +101,7 @@ def read_table(path: str, encoding: str | None = None) -> pd.DataFrame:
                     "orient=\"split\" (df.to_json(path, orient=\"split\")), "
                     "which this loader always parses correctly."
                 )
-        return pd.read_json(path)
+        return pd.read_json(path, encoding=encoding)
 
     if suffix == ".parquet":
         try:
