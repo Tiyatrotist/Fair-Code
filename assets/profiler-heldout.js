@@ -50,7 +50,7 @@
     addRow();
     addBtn.addEventListener('click', addRow);
 
-    // Resolves to [{name, column, data}] for every row the user filled in;
+    // Resolves to [{name, column, data, file}] for every row the user filled in;
     // throws if a row has only one of file/column. [] means "no held-out test".
     async function collect() {
       var specs = [];
@@ -62,7 +62,7 @@
         if (!file && !column) continue;
         if (!file || !column) throw new Error('each held-out row needs both a file and a column name');
         var data = /\.xlsx$/i.test(file.name) ? await file.arrayBuffer() : await file.text();
-        specs.push({ name: file.name, column: column, data: data });
+        specs.push({ name: file.name, column: column, data: data, file: file });
       }
       return specs;
     }

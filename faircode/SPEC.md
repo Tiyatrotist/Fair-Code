@@ -433,6 +433,11 @@ edit.
 - **`dataset_hash_a` / `dataset_hash_b`** - `compare` replaces `dataset_hash` with these two,
   matching the `a` / `b` naming the compare result already uses in section 8.
 - **`reference_hash`** - present only when a section 9 baseline was supplied.
+- **`proxy_hints_with`** (`proxy_hints_with_a` / `_b` for `compare`) - present only when held-out
+  files were given to `--proxy-hints-with` (section 3; the web proxy results; MCP
+  `compare_datasets`'s `held_out_with_a`/`_b`): a list of `{ "path", "column", "sha256" }`, one per
+  file in the order given, with `sha256` hashed like `dataset_hash` and a `sha256_note` when it is
+  `null`. It ties the proxy results in the same export to the files that produced them (#811).
 - **`<field>_note`** - present only when the matching digest is `null`, saying why the bytes were
   not available (stdin, an in-memory frame). An absent digest must not look like a present one, and
   must say why it is absent.

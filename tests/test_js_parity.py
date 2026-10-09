@@ -1200,6 +1200,23 @@ def test_web_and_python_csv_provenance_sections_are_identical(tmp_path):
     assert "provenance_key" not in _run_ui_exports(path, False)["csv"]
 
 
+def test_web_and_python_csv_provenance_render_held_out_entries_identically(tmp_path):
+    """#811: a list of {path, column, sha256} objects renders the same text in both
+    engines, including a non-ASCII path (Python json.dumps escapes it)."""
+    from faircode.report import to_csv
+
+    path = _sex_race_csv(tmp_path)
+    prov = {"faircode_version": "2.3.0", "dataset_hash": "sha256:ab",
+            "params": {"min_share": 0.05}, "overrides": {},
+            "proxy_hints_with": [
+                {"path": "données/race.csv", "column": "race", "sha256": "sha256:cd"},
+                {"path": "-", "column": "age", "sha256": None, "sha256_note": "read from stdin"}]}
+    web = _run_ui_exports(path, False, None, prov)["csv"]
+    py = to_csv(dict(profile(pd.read_csv(path))), provenance=prov)
+    assert "proxy_hints_with" in web
+    assert web.replace("\r\n", "\n") == py.replace("\r\n", "\n")
+
+
 def test_held_out_rows_control_is_wired_into_profile_and_compare_views():
     """#801-#803: rows (any number, per dataset in compare) replace the old
     single file+column inputs; profiler.html loads the shared control first."""
@@ -1291,8 +1308,9 @@ def test_held_out_control_adds_rows_collects_specs_and_validates():
         capture_output=True, text=True, encoding="utf-8", check=True)
     out = json.loads(done.stdout)
     assert out["rows_initial"] == 1 and out["rows_after_add"] == 3
-    assert out["specs"] == [{"name": "a.csv", "column": "race", "data": "race\nA\n"},
-                            {"name": "b.xlsx", "column": "age", "data": "AB:b.xlsx"}]
+    assert out["specs"] == [
+        {"name": "a.csv", "column": "race", "data": "race\nA\n", "file": {"name": "a.csv"}},
+        {"name": "b.xlsx", "column": "age", "data": "AB:b.xlsx", "file": {"name": "b.xlsx"}}]
     assert "needs both a file and a column name" in out["half"]
     assert out["rows_after_remove"] == 2
     assert out["rows_after_reset"] == 1 and out["specs_after_reset"] == []

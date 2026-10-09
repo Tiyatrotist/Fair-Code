@@ -73,6 +73,7 @@
 
   // Loaded datasets: each { table, name } once a valid file is parsed.
   var slot = { A: null, B: null };
+  var heldSpecsA = [], heldSpecsB = []; // held-out specs behind the on-screen proxy hints (#811)
   var currentCmp = null; // last successful compare() result, for export
   var currentProfiles = null; // {A, B} profile() results behind currentCmp, for proxy hints
   var currentOverrides = {}; // column -> forced kind, applied to both A and B
@@ -734,7 +735,11 @@
       var specsA = await heldOutA.collect(), specsB = await heldOutB.collect();
       if (specsA.length) heldA = await E.buildHeldOut(specsA, slot.A.table);
       if (specsB.length) heldB = await E.buildHeldOut(specsB, slot.B.table);
+      heldSpecsA = specsA;
+      heldSpecsB = specsB;
     } catch (err) {
+      heldSpecsA = [];
+      heldSpecsB = [];
       proxyResultsEl.innerHTML = '<p class="profiler-error">' + esc(err.message) + '</p>';
       return;
     }
@@ -796,6 +801,19 @@
     return ok;
   }
 
+  // Held-out files behind the proxy results, mirroring faircode/provenance.py's
+  // held_out_entries() (#811).
+  async function heldOutEntries(specs) {
+    var out = [];
+    for (var i = 0; i < specs.length; i++) {
+      var h = await fileDigest(specs[i].file);
+      var entry = { path: specs[i].name, column: specs[i].column, sha256: h.digest };
+      if (h.note !== null) entry.sha256_note = h.note;
+      out.push(entry);
+    }
+    return out;
+  }
+
   async function buildCompareProvenance() {
     var hashA = await fileDigest(slot.A && slot.A.file);
     var hashB = await fileDigest(slot.B && slot.B.file);
@@ -809,6 +827,10 @@
     };
     if (hashA.note !== null) provenance.dataset_hash_a_note = hashA.note;
     if (hashB.note !== null) provenance.dataset_hash_b_note = hashB.note;
+    if (currentCmp && currentCmp.proxy_hints_a) {
+      if (heldSpecsA.length) provenance.proxy_hints_with_a = await heldOutEntries(heldSpecsA);
+      if (heldSpecsB.length) provenance.proxy_hints_with_b = await heldOutEntries(heldSpecsB);
+    }
     return provenance;
   }
 

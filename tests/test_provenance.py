@@ -178,3 +178,44 @@ def test_no_provenance_flag_restores_the_old_shape(dataset, capsys):
 def test_terminal_output_is_untouched(dataset, capsys):
     assert main(["profile", str(dataset)]) == 0
     assert "provenance" not in capsys.readouterr().out.lower()
+
+
+# -- held-out files behind --proxy-hints-with (#811) ---------------------------
+
+def test_profile_json_records_held_out_files(dataset, tmp_path, capsys):
+    pytest.importorskip("scipy")
+    held = tmp_path / "dropped.csv"
+    held.write_text("race\nw\nb\nw\n", encoding="utf-8")
+    assert main(["profile", str(dataset), "--proxy-hints",
+                 "--proxy-hints-with", f"{held}=race", "--json"]) == 0
+    prov = json.loads(capsys.readouterr().out)["provenance"]
+    assert prov["proxy_hints_with"] == [
+        {"path": str(held), "column": "race", "sha256": sha_of(held)}]
+
+
+def test_profile_without_held_out_files_keeps_the_old_provenance_shape(dataset, capsys):
+    assert main(["profile", str(dataset), "--json"]) == 0
+    assert "proxy_hints_with" not in json.loads(capsys.readouterr().out)["provenance"]
+
+
+def test_compare_json_records_held_out_files_per_side(dataset, tmp_path, capsys):
+    pytest.importorskip("scipy")
+    other = tmp_path / "later.csv"
+    other.write_text(ROWS + "male,south,60\n", encoding="utf-8")
+    held_a = tmp_path / "held_a.csv"
+    held_a.write_text("race\nw\nb\nw\n", encoding="utf-8")
+    held_b = tmp_path / "held_b.csv"
+    held_b.write_text("race\nw\nb\nw\nb\n", encoding="utf-8")
+    assert main(["compare", str(dataset), str(other), "--proxy-hints",
+                 "--proxy-hints-with-a", f"{held_a}=race",
+                 "--proxy-hints-with-b", f"{held_b}=race", "--json"]) == 0
+    prov = json.loads(capsys.readouterr().out)["provenance"]
+    assert prov["proxy_hints_with_a"][0]["sha256"] == sha_of(held_a)
+    assert prov["proxy_hints_with_b"][0]["sha256"] == sha_of(held_b)
+
+
+def test_held_out_entries_note_an_unreadable_path():
+    from faircode.provenance import held_out_entries
+    (entry,) = held_out_entries(["no/such/file.csv=race"])
+    assert entry["sha256"] is None and "no/such/file.csv" in entry["sha256_note"]
+    assert entry["column"] == "race"

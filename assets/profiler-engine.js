@@ -1038,13 +1038,26 @@
   // Provenance section for CSV exports (#800), mirroring faircode/report.py's
   // _write_provenance_rows: nested objects become dotted keys (params.min_share),
   // arrays become JSON text (Python's ', ' separators), null becomes empty.
+  // JSON text formatted like Python's json.dumps() (", " and ": " separators,
+  // non-ASCII escaped) so a list of objects - the held-out file entries (#811) -
+  // renders identically in the web and CLI provenance CSV.
+  function pyJson(v) {
+    if (Array.isArray(v)) return '[' + v.map(pyJson).join(', ') + ']';
+    if (v !== null && typeof v === 'object') {
+      return '{' + Object.keys(v).map(function (k) { return pyJson(k) + ': ' + pyJson(v[k]); }).join(', ') + '}';
+    }
+    return JSON.stringify(v).replace(/[\u007f-\uffff]/g, function (c) {
+      return '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4);
+    });
+  }
+
   function provenanceCsv(prov) {
     var out = csvRow(['provenance_key', 'provenance_value']);
     (function walk(obj, prefix) {
       Object.keys(obj).forEach(function (k) {
         var v = obj[k], name = prefix + k;
         if (Array.isArray(v)) {
-          out += csvRow([name, '[' + v.map(function (x) { return JSON.stringify(x); }).join(', ') + ']']);
+          out += csvRow([name, pyJson(v)]);
         } else if (v !== null && typeof v === 'object') {
           walk(v, name + '.');
         } else {

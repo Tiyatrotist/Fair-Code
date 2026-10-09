@@ -75,12 +75,33 @@ def public_params(resolved: dict) -> dict:
     return {k: v for k, v in sorted(resolved.items()) if k not in _OPAQUE_PARAMS}
 
 
-def build(digests=(), params=None, overrides=None) -> dict:
+def held_out_entries(specs) -> list:
+    """Provenance entries for repeated PATH=COLUMN held-out specs (#811).
+
+    One {path, column, sha256} per spec, in the order given; an unreadable path
+    (or stdin) gets a null `sha256` and a `sha256_note`, like every other digest.
+    """
+    entries = []
+    for spec in specs or []:
+        path, _sep, column = spec.partition("=")
+        entry = {"path": path, "column": column}
+        _add_digest(entry, "sha256", path)
+        entries.append(entry)
+    return entries
+
+
+def build(digests=(), params=None, overrides=None, held_out=()) -> dict:
     """Assemble the provenance block attached to an exported result.
 
     `digests` is a sequence of (field_name, path) pairs, emitted in the order
     given and immediately after the version fields, so the thing that
     identifies the run reads first.
+
+    `held_out` is a sequence of (field_name, specs) pairs for the files given to
+    `--proxy-hints-with`: each non-empty one is recorded as a list of
+    {path, column, sha256} after `overrides`, so the proxy results in the same
+    export can be tied to the files that produced them. Omitted when empty, so
+    a run without held-out files keeps its existing shape.
     """
     block = {
         "faircode_version": __version__,
@@ -90,4 +111,7 @@ def build(digests=(), params=None, overrides=None) -> dict:
         _add_digest(block, field, path)
     block["params"] = public_params(params or {})
     block["overrides"] = dict(overrides or {})
+    for field, specs in held_out:
+        if specs:
+            block[field] = held_out_entries(specs)
     return block

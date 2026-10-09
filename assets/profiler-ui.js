@@ -47,6 +47,7 @@
 
   var currentResult = null;
   var currentFile = null;
+  var currentHeldSpecs = []; // held-out specs behind the on-screen proxy hints (#811)
   var currentName = '';
   var currentTable = null;   // parsed table, kept so overrides can re-profile
   var currentOverrides = {}; // column -> forced kind (issue #62)
@@ -445,7 +446,9 @@
     try {
       var specs = await heldOutControl.collect();
       if (specs.length) heldOut = await E.buildHeldOut(specs, currentTable);
+      currentHeldSpecs = specs;
     } catch (err) {
+      currentHeldSpecs = [];
       host.innerHTML = '<p class="profiler-error">' + esc(err.message) + '</p>';
       return;
     }
@@ -925,6 +928,19 @@
     return ok;
   }
 
+  // Held-out files behind the proxy results, as {path, column, sha256[, sha256_note]}
+  // like faircode/provenance.py's held_out_entries() (#811).
+  async function heldOutEntries(specs) {
+    var out = [];
+    for (var i = 0; i < specs.length; i++) {
+      var h = await fileDigest(specs[i].file);
+      var entry = { path: specs[i].name, column: specs[i].column, sha256: h.digest };
+      if (h.note !== null) entry.sha256_note = h.note;
+      out.push(entry);
+    }
+    return out;
+  }
+
   async function buildProvenance() {
     var hash = await fileDigest(currentFile);
     var provenance = {
@@ -935,6 +951,9 @@
       overrides: Object.assign({}, currentOverrides)
     };
     if (hash.note !== null) provenance.dataset_hash_note = hash.note;
+    if (currentResult && currentResult.proxy_hints && currentHeldSpecs.length) {
+      provenance.proxy_hints_with = await heldOutEntries(currentHeldSpecs);
+    }
     return provenance;
   }
 
