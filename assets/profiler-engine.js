@@ -489,8 +489,33 @@
     return token.indexOf(keyword) === 0; // prefix match
   }
 
+  // Compound marital-status phrases that contain a geography stem (estado)
+  // but are not geography - must mirror faircode/detect.py NON_GEOGRAPHY_PHRASES (#855).
+  var NON_GEOGRAPHY_PHRASES = [
+    ['estado', 'civil'],
+    ['marital', 'status'],
+    ['stato', 'civile'],
+    ['etat', 'civil']
+  ];
+
+  function hasConsecutivePhrase(toks, phrase) {
+    var n = phrase.length;
+    if (n === 0 || toks.length < n) return false;
+    for (var i = 0; i <= toks.length - n; i++) {
+      var match = true;
+      for (var j = 0; j < n; j++) {
+        if (toks[i + j] !== phrase[j]) { match = false; break; }
+      }
+      if (match) return true;
+    }
+    return false;
+  }
+
   function classifyName(name) {
     var toks = tokens(name);
+    for (var p = 0; p < NON_GEOGRAPHY_PHRASES.length; p++) {
+      if (hasConsecutivePhrase(toks, NON_GEOGRAPHY_PHRASES[p])) return null;
+    }
     for (var k = 0; k < KEYWORDS.length; k++) {
       var kind = KEYWORDS[k][0], words = KEYWORDS[k][1];
       for (var t = 0; t < toks.length; t++) {

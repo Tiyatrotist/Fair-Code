@@ -572,6 +572,30 @@ def test_non_english_keywords_do_not_overmatch_ordinary_words(name):
     assert classify_name(name) is None
 
 
+@pytest.mark.parametrize("name", [
+    "estado_civil", "estado civil", "EstadoCivil", "Estado Civil",
+    "marital_status", "marital status",
+    "stato_civile", "stato civile",
+    "etat_civil", "état civil",
+])
+def test_marital_status_compounds_are_not_geography(name):
+    # #855: estado alone is geography, but estado+civil (and EN/IT/FR siblings)
+    # is marital status → no keyword kind (categorical via cardinality).
+    assert classify_name(name) is None
+
+
+def test_estado_alone_stays_geography_while_estado_civil_is_categorical():
+    df = pd.DataFrame({
+        "sexo": ["H", "M", "H", "M"],
+        "estado_civil": ["soltero", "casado", "casado", "soltero"],
+        "estado": ["TX", "CA", "TX", "CA"],
+    })
+    kinds = {d["name"]: d["kind"] for d in profile(df)["dimensions"]}
+    assert kinds["sexo"] == "sex"
+    assert kinds["estado"] == "geography"
+    assert kinds["estado_civil"] == "categorical"
+
+
 def test_spanish_dataset_gets_typed_dimensions_and_banded_ages():
     df = pd.DataFrame({"sexo": ["H", "M"] * 4, "edad": [25, 30, 41, 55, 62, 19, 33, 70],
                        "estado": ["TX", "CA"] * 4})
