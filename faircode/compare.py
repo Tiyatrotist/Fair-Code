@@ -108,17 +108,20 @@ def _compare_dimension(dim_a: dict, dim_b: dict) -> dict:
         b = sb.get(label, 0.0)
         psi_total += _psi_term(a, b)
         tvd_total += abs(b - a)
+        delta = _r(b - a, 4)
         if a == 0 and b > 0:
             status = "appeared"
         elif a > 0 and b == 0:
             status = "disappeared"
+        elif delta == 0.0:
+            status = "unchanged"
         else:
             status = "shifted"
         groups.append({
             "label": str(label),
             "share_a": _r(a, 4),
             "share_b": _r(b, 4),
-            "share_delta": _r(b - a, 4),
+            "share_delta": delta,
             "status": status,
         })
     # most-shifted first, then label asc - deterministic tie-break so JS agrees.

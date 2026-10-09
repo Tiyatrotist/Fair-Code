@@ -1200,3 +1200,20 @@ def test_header_only_file_shows_not_measured_not_zero_per_dimension(tmp_path, ca
     assert main(["profile", str(path), "--html", str(html)]) == 0
     text = html.read_text(encoding="utf-8")
     assert "not measured" in text and "0/100" not in text
+
+
+def test_profile_nested_json_flattens_and_profiles(tmp_path, capsys):
+    # Issue #844: nested JSON records previously crashed with a raw traceback
+    # due to TypeError: unhashable type: 'dict'.
+    path = tmp_path / "nested.json"
+    path.write_text(
+        '[{"sex":"M","loc":{"state":"TX"}},{"sex":"F","loc":{"state":"CA"}}]',
+        encoding="utf-8",
+    )
+    exit_code = main(["profile", str(path)])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Representation score:" in captured.out
+    assert "sex" in captured.out
+    assert "loc.state" in captured.out
+

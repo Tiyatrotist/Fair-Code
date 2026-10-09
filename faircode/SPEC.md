@@ -325,7 +325,7 @@ For a shared dimension, take the **union** of group labels. Each label has `shar
 - **TVD** (Total Variation Distance) - an easy-to-read companion: `0.5 · Σ |b_i − a_i|`, range `[0, 1]`.
 - **dimension_score_delta** = `dimension_score_b − dimension_score_a`.
 - Per group: `share_a`, `share_b`, `share_delta = share_b − share_a`, and a `status` of
-  `appeared` (`a = 0, b > 0`), `disappeared` (`a > 0, b = 0`), or `shifted`. Groups are ordered by
+  `appeared` (`a = 0, b > 0`), `disappeared` (`a > 0, b = 0`), `unchanged` (`share_delta == 0`), or `shifted`. Groups are ordered by
   **descending `|share_delta|`**, then label ascending (deterministic tie-break, both engines agree).
 - **missing_pct_a**, **missing_pct_b**, **missing_pct_delta** = `missing_pct_b − missing_pct_a` -
   each side's `missing_pct` (§7), diffed independently of the non-null-share PSI/TVD calculation

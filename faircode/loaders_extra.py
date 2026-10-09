@@ -101,6 +101,15 @@ def read_table(path: str, encoding: str | None = None) -> pd.DataFrame:
                     "orient=\"split\" (df.to_json(path, orient=\"split\")), "
                     "which this loader always parses correctly."
                 )
+        # Detect records-orient JSON: a list of dicts. Flatten nested
+        # objects with pandas.json_normalize so sub-objects become dotted
+        # column names (e.g. loc.state) instead of dict cells that fail with
+        # TypeError: unhashable type: 'dict' during column detection (#844).
+        if isinstance(parsed, list) and (
+            not parsed or all(isinstance(row, dict) for row in parsed)
+        ):
+            return pd.json_normalize(parsed)
+
         return pd.read_json(path, encoding=encoding)
 
     if suffix == ".parquet":
