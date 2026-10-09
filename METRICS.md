@@ -3,8 +3,8 @@
 # Fair Code - Metrics Tracker
 
 ![Stars](https://img.shields.io/badge/Stars-49-brightgreen?style=flat-square&logo=github)
-![Contributors](https://img.shields.io/badge/Contributors-46-blue?style=flat-square)
-![Forks](https://img.shields.io/badge/Forks-51-orange?style=flat-square)
+![Contributors](https://img.shields.io/badge/Contributors-49-blue?style=flat-square)
+![Forks](https://img.shields.io/badge/Forks-53-orange?style=flat-square)
 ![Watching](https://img.shields.io/badge/Watching-8-yellow?style=flat-square)
 ![Explainers](https://img.shields.io/badge/Explainers-62-blueviolet?style=flat-square)
 ![Countries](https://img.shields.io/badge/Countries-20-informational?style=flat-square)
@@ -45,7 +45,7 @@ Weekly snapshot of project health. Updated every Friday.
 | 2026-W37 | 46 | 33 | 8 | 29 | 30K+ total | 20 | 29 | 7 total |
 | 2026-W39 | 48 | 45 | 8 | 40 | 30K+ total | 20 | 25 | 7 total |
 | 2026-W40 | 49 | 50 | 8 | 45 | 30K+ total | 20 | 41 | 7 total |
-| 2026-W41 | 49 | 51 | 8 | 46 | 30K+ total | 20 | 14 | 7 total |
+| 2026-W41 | 49 | 53 | 8 | 49 | 30K+ total | 20 | 42 | 7 total |
 
 > **2026-W27 - v1.2.0 shipped:** Open Dataset Profiler (CLI + client-side web tool) released; 23 explainers total.
 >
@@ -99,6 +99,9 @@ Weekly snapshot of project health. Updated every Friday.
 >
 > **2026-W41 - the whole CSV/proxy-hint export surface closed out (14 issues closed, one new contributor):** a 15-issue sweep of follow-ups to the previous week's work. The proxy check gained an opt-in Bonferroni/Holm multiple-comparison correction (`--proxy-correction`, MCP `correction`, web dropdown, #806) and now accepts any number of held-out files per dataset - including `.xlsx` and in the compare view - through one shared control (#801-#803); `--proxy-alpha` without `--proxy-hints` became an error (#804). CSV exports gained an opt-in provenance section (`--csv-provenance`, a web checkbox, #800), the web CSV gained the reference-baseline section the Python writer already had (#805), the MCP tools can return the CSV (`format="csv"`, #807), and SPEC.md section 12 plus the README now document the layout and flags (#797, #798). The benchmark dashboard gained a roll-up summary tab for `results/summary.csv`, the committed per-audit figures, and SVG/PNG chart download (#794-#796). [@DevKhizerer](https://github.com/DevKhizerer) joined with PR #809 (screen-reader announcements for proxy-hint results). Forks `50 -> 51`; contributors `45 -> 46`; issues closed = everything closed since 2026-10-05; stars, watching, countries and social reach unchanged or not re-measured.
 
+>
+> **2026-W41 (later) - the 12 remaining non-explainer issues closed, 12 fresh ones opened, and three more contributors credited:** every unassigned non-explainer issue was fixed and committed on its own (#810, #811, #813, #816, #819, #821, #822, #840, #842, #843, #845, #847): proxy hints now flag small expected cells, record how many pairs were tested and which held-out files (and join key) produced them; `--encoding`/BOM sniffing and a terminal that escapes control characters harden input and output; ages above `--max-age` are flagged instead of banded into `75+`; Spanish/German/French/Portuguese column names are detected; `compare --csv` lists one-sided dimensions; and the benchmark dashboard gained a summary-tab significance filter and theme-aware chart export. #848 stayed untouched because it is assigned. A follow-up fix made `--encoding` apply to `.json` files too, after a repro showed the first version blamed the wrong codec. The backlog was then replenished with 12 independently reproduced issues (#855-#866, none of them explainers), three pinned: the `estado_civil` mis-detection (#855), a user-extensible detection vocabulary (#856) and birth-year age conversion (#862). Credited in `CONTRIBUTORS.md` this note: [@Aditya3021](https://github.com/Aditya3021) (#849), [@happymode-25](https://github.com/happymode-25) (#850) and [@minutechreview](https://github.com/minutechreview) (#851, #852), plus [@Tiyatrotist](https://github.com/Tiyatrotist)'s run of twelve merged PRs, which the file had recorded as one. **Contributors `46 -> 49`**, forks `51 -> 53` (live GitHub numbers); issues closed this week `14 -> 42` (everything closed since 2026-10-05, a GitHub search count that includes the 12 above). Stars, watching, countries and social reach unchanged or not re-measured.
+
 ---
 
 ## Targets
@@ -106,12 +109,12 @@ Weekly snapshot of project health. Updated every Friday.
 | Metric | Current | Target | Timeline |
 |--------|--------:|-------:|----------|
 | Stars | 49 | 50+ | End of 2026 |
-| Forks | 51 | 60+ | End of 2026 |
+| Forks | 53 | 60+ | End of 2026 |
 | Watching | 8 | 12+ | End of 2026 |
-| Contributors | 46 | 20+ | End of 2026 |
+| Contributors | 49 | 20+ | End of 2026 |
 | Social reach | 30K+ | 40K+ | End of 2026 |
 | Countries reached | 20 | 20+ | End of 2026 |
-| Issues closed | 14 (past 7 days) | Track weekly | Ongoing |
+| Issues closed | 42 (this week, since 2026-10-05) | Track weekly | Ongoing |
 | Code audits | 7 | 8+ | End of 2026 |
 | Explainers | 62 | 65+ | End of 2026 |
 
@@ -131,4 +134,4 @@ Weekly snapshot of project health. Updated every Friday.
 
 *Resume-ready line (fill in at application time):*
 
-> Created and scaled Fair Code, an open-source responsible AI platform explaining algorithmic bias through code audits, healthcare-bias case studies, beginner explainers, and contributor-led GitHub documentation; grew the project to **49 stars**, **46 contributors**, **51 forks**, **30K+ social views**, and website visitors from **20 countries**.
+> Created and scaled Fair Code, an open-source responsible AI platform explaining algorithmic bias through code audits, healthcare-bias case studies, beginner explainers, and contributor-led GitHub documentation; grew the project to **49 stars**, **49 contributors**, **53 forks**, **30K+ social views**, and website visitors from **20 countries**.

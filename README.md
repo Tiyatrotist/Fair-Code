@@ -994,6 +994,8 @@ faircode profile data.csv --csv groups.csv         # flat, one-row-per-group CSV
 faircode profile data.csv --csv -                  # stream the CSV to stdout (pipe it onward)
 faircode profile data.csv --csv out.csv --csv-provenance   # append dataset hash + thresholds to the CSV
 faircode profile data.csv --max-categorical-card 40 --max-dimension-groups 100   # widen what counts as a dimension
+faircode profile latin1.csv --encoding latin-1     # non-UTF-8 text (a UTF-8/16/32 BOM is detected automatically)
+faircode profile data.csv --max-age 100            # ages above 100 are flagged as implausible, not banded into 75+
 faircode profile data.csv --proxy-hints --proxy-alpha 0.01 --proxy-correction holm   # stricter proxy check
 faircode profile data.csv --fail-under 70          # fail CI if score is below 70
 faircode profile data.csv --min-group-size 50      # warn on subgroups under 50 rows
@@ -1008,6 +1010,7 @@ faircode profile data.csv --cross race,age         # choose the intersection pai
 faircode profile data.csv --reference census.csv   # score vs a population baseline
 faircode profile data.csv --proxy-hints            # chi-squared proxy hints (needs scipy)
 faircode profile dropped.csv --proxy-hints --proxy-hints-with full.csv=race  # test a column you already removed
+faircode profile dropped.csv --proxy-hints --proxy-hints-with full.csv=race:id  # ...matching rows on an id column, not by position
 faircode profile data.csv --min-share 0.1          # tune the flagging thresholds
 faircode profile data.csv --json --no-provenance   # drop the run-metadata block
 ```
@@ -1050,8 +1053,10 @@ CSV layout in [section 12](faircode/SPEC.md#12-csv-export)):
 |-----------|-------|--------------|
 | `alpha` | `proxy_hints`, `compare_datasets` | Proxy-hint significance level, default 0.05, must be in `(0, 1]` (CLI `--proxy-alpha`) |
 | `correction` | `proxy_hints`, `compare_datasets` | `"bonferroni"` or `"holm"` multiple-comparison correction; adds `p_adjusted` to each hint (CLI `--proxy-correction`) |
-| `held_out_with_a` / `held_out_with_b` | `compare_datasets` | `"PATH=COLUMN"` lists testing a column already dropped from dataset A / B; need `proxy_hints=true` (CLI `--proxy-hints-with-a`/`-b`) |
+| `held_out_with_a` / `held_out_with_b` | `compare_datasets` | `"PATH=COLUMN"` (or `"PATH=COLUMN:KEY"` to join on a key column) lists testing a column already dropped from dataset A / B; need `proxy_hints=true` (CLI `--proxy-hints-with-a`/`-b`) |
 | `format` | `profile_dataset`, `compare_datasets` | `"json"` (default) or `"csv"`, which returns `{"csv": "..."}`, the same text `--csv` writes |
+| `encoding` | `profile_dataset`, `compare_datasets`, `proxy_hints` | Text encoding of delimited and JSON files (e.g. `"latin-1"`, `"utf-16"`); default is a UTF-8/16/32 BOM if present, else UTF-8 (CLI `--encoding`) |
+| `max_age` | `profile_dataset`, `compare_datasets` | Age above which a numeric age is flagged as implausible instead of banded into `75+`, default 120 (CLI `--max-age`) |
 
 The engine is domain-agnostic - it works on any tabular CSV (health, hiring, lending, justice),
 auto-detecting demographic columns (sex, race, age, geography) by name. Beyond the single-dataset
@@ -1257,8 +1262,8 @@ The full public roadmap - with phases, completion status, and content schedule -
 | Metric | Count |
 |--------|------:|
 | GitHub Stars | 49 |
-| External Contributors | 46 |
-| Forks | 51 |
+| External Contributors | 49 |
+| Forks | 53 |
 | Watching | 8 |
 | Combined Social Reach (Instagram + LinkedIn) | 30K+ |
 | Countries Reached (Website Visitors) | 20 |

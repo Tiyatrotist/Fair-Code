@@ -27,7 +27,7 @@ Fair Code is an open-source responsible AI platform explaining algorithmic bias,
 
 | Stars | Contributors | Forks | Watching | Social Reach | Countries | Audits | Explainers | CI |
 |:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| 49 | 46 | 51 | 8 | 30K+ | 20 | 7 | 62 | ✅ every push/PR |
+| 49 | 49 | 53 | 8 | 30K+ | 20 | 7 | 62 | ✅ every push/PR |
 
 > The earlier paper freeze has lifted - the real paper, with fresh results, is now planned for next
 > year. `paper/results-frozen/` (tag `v1.0-paper`, commit `bbef2ba`) is kept as a reference snapshot.
@@ -136,7 +136,7 @@ Each audit follows the same pipeline: train a biased model → measure the fairn
 
 ## Phase 4 - Contributor Expansion 🔄 In Progress
 
-**Status: Goal exceeded - 46 external contributors, past the original 15+ target**
+**Status: Goal exceeded - 49 external contributors, past the original 15+ target**
 
 Goal: grow to 15+ contributors with quality-controlled contributions.
 
@@ -147,7 +147,7 @@ Goal: grow to 15+ contributors with quality-controlled contributions.
 - [x] CI pipeline (all audit scripts run on push/PR)
 - [x] Good-first-issue and help-wanted labels
 - [x] First-interaction workflow (greets new contributors)
-- [ ] Target: 10–15 labelled issues open at all times (currently 19 - a moving snapshot, not a maintained invariant; no automated mechanism keeps it true over time)
+- [ ] Target: 10–15 labelled issues open at all times (currently 16 - a moving snapshot, not a maintained invariant; no automated mechanism keeps it true over time)
 - [x] Contributor list in README
 - [x] METRICS.md tracking contributor growth weekly
 
@@ -170,6 +170,14 @@ Go deeper on measurement - fairness dashboards, interactive notebooks, and stati
 - [x] Fairness dashboard for the benchmark harness results (interactive `results/` explorer, mirroring the Open Dataset Profiler's web/CLI split) - [benchmark.html](benchmark.html)
 - [x] Export parity: `--csv` on `faircode profile`/`compare` plus matching web Download CSV buttons, proxy-hint detection and a significance-level control on CLI, MCP and web, and a `--sample` demo dataset
 - [x] Proxy-hint depth: multiple-comparison correction, any number of held-out (already-dropped) columns per dataset in the CLI, MCP and web, and CSV provenance, with a benchmark-dashboard roll-up tab, per-audit figures and chart download
+- [x] Proxy-hint trustworthiness: small-expected-cell warnings (#810), the number of pairs tested behind `p_adjusted` (#821), held-out files recorded in provenance (#811), an optional join key instead of row order (#822), and ignored-sheet notes for held-out workbooks on the web (#816)
+- [x] Input robustness and data quality: `--encoding` plus BOM sniffing (#843), terminal-safe output (#845), implausible-age flagging with `--max-age` (#840), Spanish/German/French/Portuguese column names (#847), and `compare --csv` rows for one-sided dimensions (#842)
+- [x] Benchmark dashboard polish: a significance filter on the roll-up tab (#819) and chart export that follows the page theme with Light/Dark/Transparent options (#813)
+- [ ] Detection: stop `estado_civil` being typed as geography (#855) and let users extend the keyword vocabulary (`--keywords`, #856)
+- [ ] Encodings end to end: a web encoding picker (#857) and the encoding recorded in provenance (#858)
+- [ ] Proxy follow-ups: composite/normalised held-out keys (#859), provenance on the MCP `proxy_hints` tool (#860), an exact-test fallback for small cells (#861)
+- [ ] Age handling: convert birth-year columns to ages (#862) and flag negative age sentinels (#863)
+- [ ] Dashboard and compare: a per-tab significance toggle (#864), a colour-blind-safe chart cue (#865), and rename suggestions for one-sided dimensions in `compare` (#866)
 
 ---
 
