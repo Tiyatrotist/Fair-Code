@@ -993,6 +993,7 @@ faircode profile data.csv --html report.html       # standalone HTML report
 faircode profile data.csv --csv groups.csv         # flat, one-row-per-group CSV export
 faircode profile data.csv --csv -                  # stream the CSV to stdout (pipe it onward)
 faircode profile data.csv --csv out.csv --csv-provenance   # append dataset hash + thresholds to the CSV
+faircode profile data.csv --csv out.csv --csv-bom          # UTF-8 BOM so Excel on Windows keeps accents
 faircode profile data.csv --max-categorical-card 40 --max-dimension-groups 100   # widen what counts as a dimension
 faircode profile latin1.csv --encoding latin-1     # non-UTF-8 text (a UTF-8/16/32 BOM is detected automatically)
 faircode profile data.csv --max-age 100            # ages above 100 are flagged as implausible, not banded into 75+

@@ -249,6 +249,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--csv-provenance", action="store_true",
                    help="append a provenance section (dataset hash, resolved thresholds, "
                         "version) to the --csv export, like --json's provenance block")
+    p.add_argument("--csv-bom", action="store_true",
+                   help="prefix the --csv export with a UTF-8 BOM so Excel on Windows "
+                        "opens non-ASCII labels correctly (needs --csv)")
     p.add_argument("--proxy-hints", action="store_true",
                    help="flag strongly-associated column pairs via chi-squared (needs scipy)")
     p.add_argument("--proxy-alpha", type=float, default=None, metavar="ALPHA",
@@ -304,6 +307,9 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--csv-provenance", action="store_true",
                    help="append a provenance section (dataset hash, resolved thresholds, "
                         "version) to the --csv export, like --json's provenance block")
+    c.add_argument("--csv-bom", action="store_true",
+                   help="prefix the --csv export with a UTF-8 BOM so Excel on Windows "
+                        "opens non-ASCII labels correctly (needs --csv)")
     c.add_argument("--proxy-hints", action="store_true",
                    help="flag strongly-associated column pairs via chi-squared, "
                         "for both datasets separately (needs scipy)")
@@ -393,6 +399,9 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if args.csv_provenance and not args.csv_out:
             print("error: --csv-provenance needs --csv", file=sys.stderr)
+            return 2
+        if args.csv_bom and not args.csv_out:
+            print("error: --csv-bom needs --csv", file=sys.stderr)
             return 2
         if args.proxy_hints_with and not args.proxy_hints:
             print("error: --proxy-hints-with needs --proxy-hints", file=sys.stderr)
@@ -497,7 +506,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if args.csv_out:
             prov = _profile_provenance(args, opts, overrides) if args.csv_provenance else None
-            if _write_csv_export(args.csv_out, to_csv(result, provenance=prov)):
+            if _write_csv_export(args.csv_out, to_csv(result, provenance=prov),
+                                    bom=args.csv_bom):
                 return 2
 
         if args.json:
@@ -539,6 +549,9 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if args.csv_provenance and not args.csv_out:
             print("error: --csv-provenance needs --csv", file=sys.stderr)
+            return 2
+        if args.csv_bom and not args.csv_out:
+            print("error: --csv-bom needs --csv", file=sys.stderr)
             return 2
         if (args.proxy_hints_with_a or args.proxy_hints_with_b) and not args.proxy_hints:
             print("error: --proxy-hints-with-a/-b needs --proxy-hints", file=sys.stderr)
@@ -629,7 +642,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if args.csv_out:
             prov = _compare_provenance(args, opts, overrides) if args.csv_provenance else None
-            if _write_csv_export(args.csv_out, compare_to_csv(result, provenance=prov)):
+            if _write_csv_export(args.csv_out, compare_to_csv(result, provenance=prov),
+                                    bom=args.csv_bom):
                 return 2
         if args.json:
             provenance = None
