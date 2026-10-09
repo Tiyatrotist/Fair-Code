@@ -59,6 +59,7 @@
   var resultsEl = document.getElementById('benchResults');
   var filterBar = document.getElementById('benchFilters');
   var significantOnlyInput = document.getElementById('significantOnlyInput');
+  var significantOnlyText = document.getElementById('significantOnlyText');
   var resetFiltersBtn = document.getElementById('benchResetBtn');
   var summaryEl = document.getElementById('benchSummary');
   var tableHost = document.getElementById('benchTable');
@@ -282,12 +283,16 @@
     return out;
   }
 
+  // The significance toggle applies to the fairness tab (per result row) and the
+  // roll-up summary tab (a row counts when every model was significant, #819).
+  function hasSignificance(kind) { return kind === 'fairness' || kind === 'summary'; }
+
   function filteredRows(kind) {
     var data = state[kind];
     if (!data) return [];
     var filters = state.filters[kind];
     return data.rows.filter(function (r) {
-      if (kind === 'fairness' && state.significantOnly && !r.significant) return false;
+      if (hasSignificance(kind) && state.significantOnly && !r.significant) return false;
       return FILTER_FIELDS[kind].every(function (f) {
         return !filters[f] || r[f] === filters[f];
       });
@@ -341,7 +346,7 @@
     });
     resetFiltersBtn.disabled = !FILTER_FIELDS[kind].some(function (field) {
       return Boolean(state.filters[kind][field]);
-    }) && !(kind === 'fairness' && state.significantOnly) && !state.sort[kind];
+    }) && !(hasSignificance(kind) && state.significantOnly) && !state.sort[kind];
   }
 
   // ── Rendering: table ──────────────────────────────────────────────────
@@ -629,7 +634,7 @@
       FILTER_FIELDS[kind].forEach(function (f) {
         if (state.filters[kind][f]) params.set(f, state.filters[kind][f]);
       });
-      if (kind === 'fairness' && state.significantOnly) params.set('sig', '1');
+      if (hasSignificance(kind) && state.significantOnly) params.set('sig', '1');
       if (state.sort[kind]) params.set('sort', state.sort[kind].field + ':' + state.sort[kind].dir);
       history.replaceState(null, '', '?' + params.toString());
     } catch (e) { /* file:// or sandboxed frames: deep-linking is best-effort */ }
@@ -648,7 +653,7 @@
     if (sort.length === 2 && (sort[1] === 'asc' || sort[1] === 'desc')) {
       pending.sort[tab] = { field: sort[0], dir: sort[1] };
     }
-    if (tab === 'fairness' && params.get('sig') === '1') {
+    if (hasSignificance(tab) && params.get('sig') === '1') {
       state.significantOnly = true;
       significantOnlyInput.checked = true;
     }
@@ -675,13 +680,19 @@
       legendEl.hidden = true;
       return;
     }
-    significantOnlyInput.parentElement.hidden = kind !== 'fairness';
+    significantOnlyInput.parentElement.hidden = !hasSignificance(kind);
+    if (significantOnlyText) {
+      significantOnlyText.textContent = kind === 'summary'
+        ? ' Significant in every model only (p < 0.05)'
+        : ' Significant results only (p < 0.05)';
+    }
     resetFiltersBtn.hidden = false;
     renderFilters(kind);
     var rows = sortedRows(kind, filteredRows(kind));
-    var sigCount = kind === 'fairness' ? rows.filter(function (r) { return r.significant; }).length : null;
+    var sigCount = hasSignificance(kind) ? rows.filter(function (r) { return r.significant; }).length : null;
     summaryEl.textContent = rows.length.toLocaleString() + ' of ' + data.rows.length.toLocaleString() + ' rows shown' +
-      (sigCount !== null ? ' · ' + sigCount.toLocaleString() + ' significant' : '');
+      (sigCount !== null ? ' · ' + sigCount.toLocaleString() + ' significant' +
+        (kind === 'summary' ? ' in every model' : '') : '');
     renderTable(kind, rows);
     renderChart(kind, rows);
     renderFigure(kind);

@@ -219,6 +219,19 @@ var results = {};
   results.error_after_load = elements.benchError.textContent;
   results.error_hidden_after_load = elements.benchError.hidden;
 
+  if (process.argv[4] === 'load-only') {
+    // Read back the significance toggle's state on whichever tab the URL opened (#819).
+    results.sig_parent_hidden = elements.significantOnlyInput.parentElement.hidden;
+    results.sig_checked = !!elements.significantOnlyInput.checked;
+    results.sig_label = elements.significantOnlyText.textContent;
+    elements.significantOnlyInput.checked = !elements.significantOnlyInput.checked;
+    (elements.significantOnlyInput._listeners.change || []).forEach(function (f) { f(); });
+    results.summary_after_toggle = elements.benchSummary.textContent;
+    results.url_after_toggle = global.__lastUrl;
+    process.stdout.write(JSON.stringify(results));
+    return;
+  }
+
   if (elements.benchResults.hidden) {
     process.stdout.write(JSON.stringify(results));
     return;
@@ -339,9 +352,9 @@ var results = {};
 """
 
 
-def _run_dom_stub(search="", block_url=""):
+def _run_dom_stub(search="", block_url="", mode=""):
     completed = subprocess.run(
-        ["node", "-e", _DOM_STUB, str(REPO_ROOT), search, block_url],
+        ["node", "-e", _DOM_STUB, str(REPO_ROOT), search, block_url, mode],
         capture_output=True, text=True, encoding="utf-8", check=True,
     )
     return json.loads(completed.stdout)
@@ -539,3 +552,28 @@ def test_benchmark_dashboard_bundled_load_partial_failure():
     assert r_all_failed["error_hidden_after_load"] is False
     assert "Could not fetch the bundled results/ CSVs" in r_all_failed["error_after_load"]
 
+
+
+def test_benchmark_dashboard_summary_tab_has_a_significance_filter():
+    """#819: the roll-up summary tab shows the significance toggle, filters on the
+    all-models-significant flag, and keeps it in the URL like the fairness tab."""
+    summary = pd.read_csv(REPO_ROOT / "results" / "summary.csv")
+    every_model = summary[(summary["n_models"] > 0)
+                          & (summary["n_models_significant"] == summary["n_models"])]
+    assert 0 < len(every_model) < len(summary), "fixture needs both kinds of summary row"
+
+    r = _run_dom_stub("?tab=summary", mode="load-only")
+    assert r["sig_parent_hidden"] is False  # visible on the summary tab now
+    assert r["sig_checked"] is False
+    assert "every model" in r["sig_label"]
+    assert r["summary_unfiltered"] == (
+        f"{len(summary):,} of {len(summary):,} rows shown"
+        f" · {len(every_model):,} significant in every model")
+    assert r["summary_after_toggle"] == (
+        f"{len(every_model):,} of {len(summary):,} rows shown"
+        f" · {len(every_model):,} significant in every model")
+    assert "tab=summary" in r["url_after_toggle"] and "sig=1" in r["url_after_toggle"]
+
+    restored = _run_dom_stub("?tab=summary&sig=1", mode="load-only")
+    assert restored["sig_checked"] is True
+    assert restored["summary_unfiltered"].startswith(f"{len(every_model):,} of {len(summary):,} rows shown")
