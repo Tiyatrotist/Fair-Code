@@ -447,6 +447,15 @@ def _build_flags(dimensions: list[dict], intersections: list[dict],
     return flags
 
 
+# Appended to `flags` when nothing was recognised by name (#847). Mirror in
+# assets/profiler-engine.js.
+NO_KIND_DETECTED_FLAG = (
+    "No column name matched sex, race, age or geography, so every dimension is a plain "
+    "categorical (ages are not banded, geography is not recognised). If a column is one of "
+    "these, map it by hand: --map COL=KIND, or the column-mapping control on the web."
+)
+
+
 _REF_COLUMN_ALIASES = ("column", "dimension", "dim")
 _REF_GROUP_ALIASES = ("group", "value", "label", "category")
 _REF_SHARE_ALIASES = ("share", "expected", "expected_share", "proportion",
@@ -577,5 +586,8 @@ def profile(df: pd.DataFrame, overrides=None, opts=None) -> dict:
         "dimensions": dimensions,
         "intersections": intersections,
         "flags": _build_flags(dimensions, intersections,
-                              o["imbalance_flag"], o["missing_flag"], o["max_age"]) + ref_flags,
+                              o["imbalance_flag"], o["missing_flag"], o["max_age"]) + ref_flags
+                 + ([NO_KIND_DETECTED_FLAG]
+                    if dimensions and not overrides
+                    and all(d["kind"] == "categorical" for d in dimensions) else []),
     }

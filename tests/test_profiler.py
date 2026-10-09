@@ -550,3 +550,43 @@ def test_implausible_ages_are_left_out_of_the_intersection():
     result = profile(df)
     labels = {cell["b"] for inter in result["intersections"] for cell in inter["cells"]}
     assert "75+" not in labels
+
+
+# --- #847: column-name detection beyond English -----------------------------------
+
+@pytest.mark.parametrize("name, kind", [
+    ("sexo", "sex"), ("Género", "sex"), ("Geschlecht", "sex"), ("sexe", "sex"),
+    ("raza", "race"), ("Raça", "race"), ("Rasse", "race"), ("ethnie", "race"), ("etnia", "race"),
+    ("edad", "age"), ("Alter", "age"), ("Âge", "age"), ("idade", "age"),
+    ("Fecha de nacimiento", "age"), ("Geburtsdatum", "age"), ("date_naissance", "age"),
+    ("Bundesland", "geography"), ("país", "geography"), ("Código postal", "geography"),
+    ("ciudad", "geography"), ("PLZ", "geography"), ("ville", "geography"), ("cidade", "geography"),
+])
+def test_classify_name_understands_spanish_german_french_and_portuguese(name, kind):
+    assert classify_name(name) == kind
+
+
+@pytest.mark.parametrize("name", ["generosity", "alternative", "landing", "razor", "Straße",
+                                  "genre", "etat_civil"])
+def test_non_english_keywords_do_not_overmatch_ordinary_words(name):
+    assert classify_name(name) is None
+
+
+def test_spanish_dataset_gets_typed_dimensions_and_banded_ages():
+    df = pd.DataFrame({"sexo": ["H", "M"] * 4, "edad": [25, 30, 41, 55, 62, 19, 33, 70],
+                       "estado": ["TX", "CA"] * 4})
+    result = profile(df)
+    kinds = {d["name"]: d["kind"] for d in result["dimensions"]}
+    assert kinds == {"sexo": "sex", "edad": "age", "estado": "geography"}
+    edad = next(d for d in result["dimensions"] if d["name"] == "edad")
+    assert all("-" in g["label"] or g["label"].endswith("+") for g in edad["groups"])
+    assert not any("No column name matched" in f for f in result["flags"])
+
+
+def test_no_recognised_kind_suggests_map():
+    df = pd.DataFrame({"colA": ["x", "y"] * 4, "colB": ["p", "q"] * 4})
+    flags = profile(df)["flags"]
+    assert any("--map COL=KIND" in f for f in flags)
+    # a hand-mapped run has already made the decision
+    assert not any("No column name matched" in f
+                   for f in profile(df, {"colA": "sex"})["flags"])

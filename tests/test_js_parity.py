@@ -364,6 +364,39 @@ def test_python_js_parity_for_implausible_ages(tmp_path):
         assert implausible and implausible == [f for f in js_flags if "implausible age" in f]
 
 
+def test_python_js_parity_for_non_english_column_names(tmp_path):
+    """#847: accent-stripped, multilingual keyword detection agrees between engines,
+    including the no-kind-detected --map hint."""
+    names = ["sexo", "Género", "Geschlecht", "raza", "Rasse", "Raça", "edad", "Alter", "Âge",
+             "Fecha de nacimiento", "Bundesland", "país", "Código postal", "estado",
+             "generosity", "alternative", "landing", "Straße", "etat_civil"]
+    script = (
+        "require(process.argv[1]);var E=globalThis.FairCodeProfiler;"
+        "var out={};JSON.parse(process.argv[2]).forEach(function(n){"
+        "out[n]=E.profile({columns:[n],rows:[{[n]:'a'},{[n]:'b'}]}).dimensions[0].kind});"
+        "process.stdout.write(JSON.stringify(out));"
+    )
+    completed = subprocess.run(
+        ["node", "-e", script, str(REPO_ROOT / "assets" / "profiler-engine.js"), json.dumps(names)],
+        capture_output=True, text=True, encoding="utf-8", check=True)
+    from faircode.detect import classify_name
+    js = json.loads(completed.stdout)
+    for name in names:
+        py = classify_name(name) or "categorical"
+        assert js[name] == py, name
+
+    path = tmp_path / "plain.csv"
+    path.write_text("colA,colB\n" + "\n".join(f"{'x' if i % 2 else 'y'},{'p' if i % 3 else 'q'}" for i in range(40)) + "\n")
+    python_result = dict(profile(pd.read_csv(path)))
+    completed = subprocess.run(["node", "scripts/engine-js.js", "profile", str(path)],
+                               capture_output=True, text=True, encoding="utf-8", check=True)
+    javascript_result = json.loads(completed.stdout)
+    assert javascript_result["flags"][-1] == python_result["flags"][-1]
+    assert "--map COL=KIND" in python_result["flags"][-1]
+    python_result.pop("flags"); javascript_result.pop("flags")
+    assert javascript_result == python_result
+
+
 def test_python_js_profiler_parity_with_overrides_cross_and_thresholds(tmp_path):
     """Non-default options - --map/--cross/--reference/thresholds - only ever
     had cross-engine parity coverage for their default-off path (issue #376).

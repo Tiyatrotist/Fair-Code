@@ -8,15 +8,25 @@ truth that the JS port mirrors verbatim.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 # Keyword lists - order matters; the first dimension that matches wins.
 # Mirror these exactly in assets/profiler-engine.js.
+#
+# English first, then Spanish, German, French and Portuguese (#847). Names are
+# matched accent-stripped and lower-cased (see _tokens), so "género" and
+# "Geschlecht" need no accented keyword.
 KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
-    ("sex", ("sex", "gender")),
-    ("race", ("race", "ethnic", "ethnicity")),
-    ("age", ("age", "dob", "yob", "birth")),
+    ("sex", ("sex", "gender",
+             "sexo", "genero", "geschlecht", "sexe")),
+    ("race", ("race", "ethnic", "ethnicity",
+              "raza", "etnia", "rasse", "ethnie", "raca")),
+    ("age", ("age", "dob", "yob", "birth",
+             "edad", "nacimiento", "alter", "geburt", "idade", "nascimento", "naissance")),
     ("geography", ("region", "state", "zip", "zipcode", "postal", "country",
-                   "county", "city", "location", "province")),
+                   "county", "city", "location", "province",
+                   "estado", "pais", "provincia", "ciudad", "bundesland", "land", "stadt",
+                   "plz", "ville", "pays", "departement", "cidade", "regiao", "municipio")),
 ]
 
 MAX_CATEGORICAL_CARD = 20
@@ -27,7 +37,19 @@ MAX_CATEGORICAL_CARD = 20
 # "countryside" respectively, none of which are demographic columns. These
 # stay exact-match-only regardless of length; every other 4+ char keyword
 # still uses prefix matching (see _token_matches).
-EXACT_ONLY_KEYWORDS = frozenset({"race", "state", "city", "region", "country"})
+#
+# The non-English additions follow the same rule: "genero" would prefix-match "generosity",
+# "alter" "alternative", "land" "landing", and the short country/city/state words (pais, pays,
+# estado, ville, stadt) and race words (raza, raca, rasse) only mean what we want as a whole token.
+EXACT_ONLY_KEYWORDS = frozenset({
+    "race", "state", "city", "region", "country",
+    "genero", "alter", "land", "raza", "raca", "rasse", "pais", "pays", "estado", "ville",
+    "stadt",
+})
+
+# Combining diacritical marks, removed after NFD so "género" tokenizes as "genero".
+# Mirror in assets/profiler-engine.js (same Unicode range).
+_COMBINING_MARKS = re.compile("[\u0300-\u036f]")
 
 # Kinds a user may force a column to via a manual override. Anything else
 # (e.g. "ignore") excludes the column from analysis. Mirror in profiler-engine.js.
@@ -41,7 +63,8 @@ def _tokens(name: str) -> list[str]:
     'ageGroup' -> ['age','group']. This token boundary is what stops 'age' from
     matching 'Agency_Text' or 'Language'.
     """
-    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", str(name))
+    stripped = _COMBINING_MARKS.sub("", unicodedata.normalize("NFD", str(name)))
+    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", stripped)
     return [t.lower() for t in re.split(r"[^A-Za-z0-9]+", spaced) if t]
 
 

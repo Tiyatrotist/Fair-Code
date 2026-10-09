@@ -126,14 +126,26 @@
 
   // ── Keyword lists - MUST mirror faircode/detect.py ─────────────────────
   var KEYWORDS = [
-    ['sex', ['sex', 'gender']],
-    ['race', ['race', 'ethnic', 'ethnicity']],
-    ['age', ['age', 'dob', 'yob', 'birth']],
+    ['sex', ['sex', 'gender',
+             'sexo', 'genero', 'geschlecht', 'sexe']],
+    ['race', ['race', 'ethnic', 'ethnicity',
+              'raza', 'etnia', 'rasse', 'ethnie', 'raca']],
+    ['age', ['age', 'dob', 'yob', 'birth',
+             'edad', 'nacimiento', 'alter', 'geburt', 'idade', 'nascimento', 'naissance']],
     ['geography', ['region', 'state', 'zip', 'zipcode', 'postal', 'country',
-                   'county', 'city', 'location', 'province']]
+                   'county', 'city', 'location', 'province',
+                   'estado', 'pais', 'provincia', 'ciudad', 'bundesland', 'land', 'stadt',
+                   'plz', 'ville', 'pays', 'departement', 'cidade', 'regiao', 'municipio']]
   ];
 
   var DATE_RE = /[0-9]{1,4}[/-][0-9]{1,2}[/-][0-9]{1,4}/;
+
+  // Appended to `flags` when nothing was recognised by name (#847); must mirror
+  // faircode/profiler.py's NO_KIND_DETECTED_FLAG.
+  var NO_KIND_DETECTED_FLAG =
+    'No column name matched sex, race, age or geography, so every dimension is a plain ' +
+    'categorical (ages are not banded, geography is not recognised). If a column is one of ' +
+    'these, map it by hand: --map COL=KIND, or the column-mapping control on the web.';
 
   // ── Delimiter sniffing (SPEC-adjacent; mirrors faircode/loaders.py) ─────
   // Picks whichever of , \t ; | appears the same number of times on every
@@ -456,7 +468,9 @@
 
   // ── Column detection (SPEC section 1) ──────────────────────────────────
   function tokens(name) {
-    var spaced = String(name).replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+    // Accent-stripped like detect.py's _tokens (NFD, then drop U+0300-U+036F).
+    var stripped = String(name).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    var spaced = stripped.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
     return spaced.split(/[^A-Za-z0-9]+/).filter(Boolean).map(function (t) {
       return t.toLowerCase();
     });
@@ -464,7 +478,11 @@
 
   // Keywords whose prefix form collides with ordinary English words - see
   // faircode/detect.py's EXACT_ONLY_KEYWORDS, must mirror it exactly.
-  var EXACT_ONLY_KEYWORDS = { race: 1, state: 1, city: 1, region: 1, country: 1 };
+  var EXACT_ONLY_KEYWORDS = {
+    race: 1, state: 1, city: 1, region: 1, country: 1,
+    genero: 1, alter: 1, land: 1, raza: 1, raca: 1, rasse: 1, pais: 1, pays: 1, estado: 1,
+    ville: 1, stadt: 1
+  };
 
   function tokenMatches(token, keyword) {
     if (keyword.length < 4 || EXACT_ONLY_KEYWORDS.hasOwnProperty(keyword)) return token === keyword;
@@ -1297,6 +1315,9 @@
       dimensions: dimensions,
       intersections: inters,
       flags: buildFlags(dimensions, inters, o.imbalance_flag, o.missing_flag, o.max_age).concat(refFlags)
+        .concat(dimensions.length && !Object.keys(overrides).length &&
+                dimensions.every(function (d) { return d.kind === 'categorical'; })
+                ? [NO_KIND_DETECTED_FLAG] : [])
     };
   }
 

@@ -25,7 +25,8 @@ that is what the `unfair.py` / `fair.py` audits do. The Profiler answers a diffe
 
 Repeated header names are made unique the way pandas does (`name`, `name.1`, `name.2`, ... skipping names already taken) before anything else; the browser parser does the same so two same-named columns are two dimensions, never one overwriting the other (#834).
 
-**Tokenize** the column name: split on separators **and** camelCase boundaries, then lower-case.
+**Tokenize** the column name: strip accents (Unicode NFD, then drop U+0300-U+036F, so `Género`
+becomes `Genero`), split on separators **and** camelCase boundaries, then lower-case.
 `DateOfBirth → [date, of, birth]`, `Sex_Code_Text → [sex, code, text]`, `ageGroup → [age, group]`.
 Token boundaries are what stop `age` from matching `Agency_Text` or `Language`.
 
@@ -34,14 +35,21 @@ it is ≥4 chars (prefix, not substring - so `age` never matches `agency`, but `
 `zip`). A small set of keywords (`race`, `state`, `city`, `region`, `country` -
 `detect.EXACT_ONLY_KEYWORDS`) are exact-match-only regardless of length, since their common prefixes
 false-positive too easily (`statecode` would otherwise match `state`, `statement`/`stateless` would
-too). Classify by the **first** keyword list that matches any token (order matters):
+too). The non-English additions below that would collide with ordinary words (`genero`,
+`alter`, `land`, `raza`, `raca`, `rasse`, `pais`, `pays`, `estado`, `ville`, `stadt`) are exact-only too.
+Classify by the **first** keyword list that matches any token (order matters):
 
 | Dimension   | Keywords                                                                 |
 |-------------|--------------------------------------------------------------------------|
-| `sex`       | `sex`, `gender`                                                          |
-| `race`      | `race`, `ethnic`, `ethnicity`                                           |
-| `age`       | `age`, `dob`, `yob`, `birth`                                            |
-| `geography` | `region`, `state`, `zip`, `zipcode`, `postal`, `country`, `county`, `city`, `location`, `province` |
+| `sex`       | `sex`, `gender`; es/de/fr/pt: `sexo`, `genero`, `geschlecht`, `sexe`      |
+| `race`      | `race`, `ethnic`, `ethnicity`; `raza`, `etnia`, `rasse`, `ethnie`, `raca` |
+| `age`       | `age`, `dob`, `yob`, `birth`; `edad`, `nacimiento`, `alter`, `geburt`, `idade`, `nascimento`, `naissance` |
+| `geography` | `region`, `state`, `zip`, `zipcode`, `postal`, `country`, `county`, `city`, `location`, `province`; `estado`, `pais`, `provincia`, `ciudad`, `bundesland`, `land`, `stadt`, `plz`, `ville`, `pays`, `departement`, `cidade`, `regiao`, `municipio` |
+
+Names that are not covered (other languages, abbreviations) fall through to the generic categorical
+rule below. When *no* column of a profile was recognised by name - every dimension is `categorical`
+and no `--map` was given - a final flag says so and points at `--map COL=KIND` (#847), since ages
+would otherwise silently go unbanded.
 
 A column not matched above is treated as a **generic categorical** demographic *only if* its
 distinct non-null value count is `2 ≤ n ≤ 20`.
