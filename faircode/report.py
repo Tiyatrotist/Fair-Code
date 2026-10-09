@@ -361,6 +361,9 @@ def compare_to_csv(cmp: dict, provenance: dict | None = None) -> str:
     Group columns: dimension, kind_a, kind_b, label, share_a, share_b,
     share_delta, status. A dimension whose comparison was skipped for a kind
     mismatch (kind_mismatch: true) has no groups rows, only its summary row.
+    A dimension detected in only one dataset has no group or summary row; when
+    there are any, a `dimension,present_in` section lists them (`a_only` /
+    `b_only`) so a spreadsheet can filter and count them (#842).
     """
     buf = io.StringIO()
     writer = _SafeCsvWriter(buf)
@@ -384,6 +387,13 @@ def compare_to_csv(cmp: dict, provenance: dict | None = None) -> str:
             cd["name"], cd["kind_mismatch"], cd["dimension_score_a"], cd["dimension_score_b"],
             cd["dimension_score_delta"], cd.get("psi"), cd.get("tvd"), cd.get("drift_level"),
         ])
+    one_sided = ([(name, "a_only") for name in cmp.get("removed_dimensions", [])]
+                 + [(name, "b_only") for name in cmp.get("added_dimensions", [])])
+    if one_sided:
+        writer.writerow([])
+        writer.writerow(["dimension", "present_in"])
+        for name, side in one_sided:
+            writer.writerow([name, side])
     writer.writerow([])
     writer.writerow(["flag"])
     for flag in cmp["flags"]:

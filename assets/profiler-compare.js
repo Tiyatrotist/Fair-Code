@@ -678,6 +678,11 @@
       out += csvRow([cd.name, cd.kind_mismatch, cd.dimension_score_a, cd.dimension_score_b,
         cd.dimension_score_delta, cd.psi, cd.tvd, cd.drift_level]);
     });
+    if (cmp.removed_dimensions.length || cmp.added_dimensions.length) {
+      out += csvRow([]) + csvRow(['dimension', 'present_in']);
+      cmp.removed_dimensions.forEach(function (n) { out += csvRow([n, 'a_only']); });
+      cmp.added_dimensions.forEach(function (n) { out += csvRow([n, 'b_only']); });
+    }
     out += csvRow([]) + csvRow(['flag']);
     cmp.flags.forEach(function (f) { out += csvRow([f]); });
     [['proxy_hints_a', 'A'], ['proxy_hints_b', 'B']].forEach(function (k) {

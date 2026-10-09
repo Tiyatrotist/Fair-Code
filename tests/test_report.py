@@ -690,3 +690,15 @@ def test_compare_terminal_escapes_control_characters():
     out = compare_to_terminal(compare(a, b, name_a="a\x1b[1m.csv", name_b="b.csv"))
     assert "\x1b" not in out
     assert "\\x1b[1m" in out
+
+
+def test_compare_csv_lists_dimensions_present_in_only_one_dataset():
+    """#842: removed/added dimensions get dimension,present_in rows, not just a flag."""
+    base = {"dimensions": [], "flags": [], "removed_dimensions": ["race"],
+            "added_dimensions": ["region", "age"]}
+    rows = list(csv.reader(io.StringIO(compare_to_csv(base))))
+    i = rows.index(["dimension", "present_in"])
+    assert rows[i + 1:i + 4] == [["race", "a_only"], ["region", "b_only"], ["age", "b_only"]]
+    plain = compare_to_csv({"dimensions": [], "flags": [], "removed_dimensions": [],
+                            "added_dimensions": []})
+    assert "present_in" not in plain

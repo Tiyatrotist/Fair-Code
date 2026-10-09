@@ -567,7 +567,8 @@ each preceded by a blank row and its own header, in this order:
 
 **Compare.** Group rows `dimension,kind_a,kind_b,label,share_a,share_b,share_delta,status`, a
 dimension-summary section `dimension,kind_mismatch,dimension_score_a,dimension_score_b,
-dimension_score_delta,psi,tvd,drift_level`, `flag`, proxy hints (a leading `dataset` column holds `A`
+dimension_score_delta,psi,tvd,drift_level`, a `dimension,present_in` section (only when a dimension
+was detected in just one dataset: `a_only` / `b_only`, #842), `flag`, proxy hints (a leading `dataset` column holds `A`
 or `B`), and provenance. A dimension skipped for a kind mismatch has no group rows, only its summary
 row.
 
