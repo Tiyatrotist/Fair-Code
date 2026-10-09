@@ -36,7 +36,12 @@ import pandas as pd
 from . import __version__
 from .compare import compare
 from .detect import VALID_KINDS
-from .loaders_extra import get_xlsx_sheet_info, read_table
+from .loaders_extra import (
+    ENCODING_IGNORED_CLI,
+    encoding_ignored_for_path,
+    get_xlsx_sheet_info,
+    read_table,
+)
 # _resolve_opts gives the thresholds that were actually in force, defaults
 # included, which is what the provenance block has to record. Reaching for the
 # private helper follows the existing precedent in compare.py (`from .profiler
@@ -178,6 +183,15 @@ def _check_encoding(name):
               file=sys.stderr)
         raise SystemExit(2)
 
+
+
+
+def _warn_encoding_ignored(paths, encoding):
+    """Print a one-line stderr notice when --encoding can't apply (#870)."""
+    if encoding is None:
+        return
+    if any(encoding_ignored_for_path(p) for p in paths if p and p != "-"):
+        print(ENCODING_IGNORED_CLI, file=sys.stderr)
 
 def _read_or_exit(path: str, encoding: str | None = None):
     """Read a table, or print a plain error and raise SystemExit(2)."""
@@ -409,6 +423,7 @@ def main(argv: list[str] | None = None) -> int:
             args.csv = SAMPLE_FILENAME  # for any downstream display purposes
             sheet_info = None
         else:
+            _warn_encoding_ignored([args.csv], args.encoding)
             df = _read_or_exit(args.csv, args.encoding)
             sheet_info = get_xlsx_sheet_info(args.csv)
         if sheet_info is not None:
@@ -561,6 +576,7 @@ def main(argv: list[str] | None = None) -> int:
             "max_dimension_groups": args.max_dimension_groups,
             "max_age": args.max_age,
         }
+        _warn_encoding_ignored([args.csv_a, args.csv_b], args.encoding)
         df_a = _read_or_exit(args.csv_a, args.encoding)
         df_b = _read_or_exit(args.csv_b, args.encoding)
         _check_map_columns(overrides, set(df_a.columns) | set(df_b.columns))

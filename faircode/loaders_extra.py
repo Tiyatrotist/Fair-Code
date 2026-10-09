@@ -143,3 +143,23 @@ def get_xlsx_sheet_info(path: str) -> tuple[str, list[str]] | None:
     if not book.sheet_names:
         return None
     return book.sheet_names[0], book.sheet_names[1:]
+
+
+# Binary table formats that never decode as text, so an explicit text encoding
+# cannot apply (#870). Keep the suffixes lower-case to match Path.suffix.lower().
+_ENCODING_IGNORED_SUFFIXES = (".xlsx", ".parquet")
+
+ENCODING_IGNORED_CLI = "--encoding has no effect on .xlsx/.parquet files"
+ENCODING_IGNORED_NOTE = "encoding has no effect on .xlsx/.parquet files"
+
+
+def encoding_ignored_for_path(path: str) -> bool:
+    """True when `path`'s suffix is a format that ignores a text encoding."""
+    return Path(path).suffix.lower() in _ENCODING_IGNORED_SUFFIXES
+
+
+def encoding_ignored_note(path: str, encoding: str | None) -> str | None:
+    """Return the MCP/agent note when `encoding` is set for a binary path."""
+    if encoding is None or not encoding_ignored_for_path(path):
+        return None
+    return ENCODING_IGNORED_NOTE

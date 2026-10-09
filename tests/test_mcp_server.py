@@ -147,6 +147,26 @@ def test_profile_dataset_single_sheet_xlsx_has_no_sheet_note(tmp_path):
     assert "sheet_note" not in result
 
 
+@requires_openpyxl
+def test_profile_dataset_xlsx_encoding_adds_notes(tmp_path):
+    """#870: MCP returns a notes entry when encoding is set for .xlsx."""
+    path = tmp_path / "data.xlsx"
+    _write_multi_sheet_xlsx(path, "sex", ["M", "F"])
+
+    result = _profile_dataset_impl(str(path), encoding="latin-1")
+
+    assert result["notes"] == ["encoding has no effect on .xlsx/.parquet files"]
+
+
+def test_profile_dataset_csv_encoding_has_no_notes(tmp_path):
+    path = tmp_path / "a.csv"
+    path.write_text("sex\nM\nF\n", encoding="utf-8")
+
+    result = _profile_dataset_impl(str(path), encoding="latin-1")
+
+    assert "notes" not in result
+
+
 def test_profile_dataset_invalid_override_kind_raises(tmp_path):
     path = tmp_path / "a.csv"
     path.write_text("sex\nM\nF\n", encoding="utf-8")

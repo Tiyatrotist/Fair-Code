@@ -810,6 +810,53 @@ def test_profile_xlsx_single_sheet_stays_silent(tmp_path, capsys):
     assert "ignored" not in captured.err
 
 
+@requires_openpyxl
+def test_profile_xlsx_warns_when_encoding_has_no_effect(tmp_path, capsys):
+    """#870: --encoding is accepted for .xlsx but does nothing; say so on stderr."""
+    import openpyxl
+
+    path = tmp_path / "data.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["sex"])
+    ws.append(["M"])
+    ws.append(["F"])
+    wb.save(path)
+
+    exit_code = main(["profile", str(path), "--encoding", "latin-1"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--encoding has no effect on .xlsx/.parquet files" in captured.err
+
+
+def test_profile_parquet_warns_when_encoding_has_no_effect(tmp_path, capsys, monkeypatch):
+    """#870: .parquet gets the same notice before the read fails without pyarrow."""
+    path = tmp_path / "a.parquet"
+    path.write_text("not a real parquet file", encoding="utf-8")
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("reading .parquet files requires the 'pyarrow' package")
+
+    monkeypatch.setattr(cli, "read_table", boom)
+    with pytest.raises(SystemExit) as exc_info:
+        main(["profile", str(path), "--encoding", "latin-1"])
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 2
+    assert "--encoding has no effect on .xlsx/.parquet files" in captured.err
+    assert "error: reading .parquet files requires the 'pyarrow' package" in captured.err
+
+
+def test_profile_csv_encoding_stays_silent(tmp_path, capsys):
+    """#870: delimited input still uses --encoding; no false warning."""
+    path = tmp_path / "a.csv"
+    path.write_text("sex\nM\nF\n", encoding="latin-1")
+    exit_code = main(["profile", str(path), "--encoding", "latin-1"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "--encoding has no effect" not in captured.err
+
+
 def _make_multi_sheet_xlsx(path, sex_values):
     import openpyxl
 

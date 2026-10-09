@@ -40,7 +40,11 @@ import pandas as pd
 from . import __version__
 from .compare import compare
 from .detect import VALID_KINDS
-from .loaders_extra import get_xlsx_sheet_info, read_table
+from .loaders_extra import (
+    encoding_ignored_note,
+    get_xlsx_sheet_info,
+    read_table,
+)
 from .profiler import _resolve_opts, parse_reference, profile
 from .provenance import build as build_provenance
 from .proxy import parse_held_out_specs
@@ -195,6 +199,9 @@ def _profile_dataset_impl(path, overrides=None, cross=None, reference_path=None,
     note = _sheet_note(path)
     if note:
         result["sheet_note"] = note
+    enc_notes = [n for n in (encoding_ignored_note(path, encoding),) if n]
+    if enc_notes:
+        result["notes"] = enc_notes
     if include_provenance:
         digests = [("dataset_hash", path)]
         if reference_path:
@@ -230,6 +237,15 @@ def _compare_datasets_impl(path_a, path_b, overrides=None,
         result["sheet_note_a"] = note_a
     if note_b:
         result["sheet_note_b"] = note_b
+    enc_notes = [
+        n for n in (
+            encoding_ignored_note(path_a, encoding),
+            encoding_ignored_note(path_b, encoding),
+        ) if n
+    ]
+    # One note is enough when both paths are binary formats.
+    if enc_notes:
+        result["notes"] = [enc_notes[0]]
     if proxy_hints:
         kw = {} if alpha is None else {"alpha": alpha}
         kw["correction"] = correction
@@ -291,6 +307,9 @@ def _proxy_hints_impl(path, overrides=None, held_out_with=None, alpha=None,
     notes += [n for spec in (held_out_with or []) for n in (_sheet_note(spec.partition("=")[0]),) if n]
     if notes:
         output["sheet_notes"] = notes
+    enc_notes = [n for n in (encoding_ignored_note(path, encoding),) if n]
+    if enc_notes:
+        output["notes"] = enc_notes
     return output
 
 
