@@ -189,3 +189,28 @@ def test_terminal_report_marks_small_cell_hints():
     result["proxy_hints"] = [{"a": "sex", "b": "race", "p_value": 0.01, "cramers_v": 0.4,
                               "chi2": 5.0, "low_expected_share": 0.5, "low_expected": True}]
     assert "small cells" in to_terminal(result)
+
+
+def test_proxy_hints_record_how_many_pairs_were_tested():
+    """#821: n_tests is the family size m; constant-column pairs do not count."""
+    df = pd.DataFrame({
+        "sex": ["M", "F"] * 20,
+        "race": ["a", "b"] * 20,
+        "region": ["x", "y", "z", "w"] * 10,
+        "country": ["US"] * 40,  # constant - every pair with it is skipped
+    })
+    dims = [{"name": n, "kind": k} for n, k in
+            (("sex", "sex"), ("race", "race"), ("region", "geography"), ("country", "geography"))]
+    hints = proxy_hints(df, dims, alpha=1.0, correction="bonferroni")
+    assert hints and all(h["n_tests"] == 3 for h in hints)  # sex-race, sex-region, race-region
+    for h in hints:
+        assert h["p_adjusted"] == pytest.approx(min(1.0, h["p_value"] * h["n_tests"]))
+    assert all(h["n_tests"] == 3 for h in proxy_hints(df, dims, alpha=1.0))
+
+
+def test_terminal_report_shows_family_size_next_to_adjusted_p():
+    from faircode.report import to_terminal
+    result = profile(pd.DataFrame({"sex": ["M", "F"] * 12, "race": ["a", "b"] * 12}))
+    result["proxy_hints"] = [{"a": "sex", "b": "race", "p_value": 0.01, "cramers_v": 0.4,
+                              "chi2": 5.0, "p_adjusted": 0.03, "n_tests": 3}]
+    assert "adj p=0.03 (m=3 pairs)" in to_terminal(result)

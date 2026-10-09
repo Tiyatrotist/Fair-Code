@@ -119,6 +119,10 @@ def proxy_hints(df: pd.DataFrame, dimensions: list, alpha=PROXY_ALPHA,
     high-cardinality categorical or a rare group - so treat it as a lead, not
     a finding (#810).
 
+    Each hint also carries `n_tests`, the number of pairs actually tested (pairs
+    with a constant column are skipped and do not count): the `m` a reader needs
+    to re-derive `p_adjusted` (Bonferroni is `min(1, p * n_tests)`, #821).
+
     `held_out` is an optional {column_name: pandas.Series} map for testing
     against a protected attribute that has already been dropped from `df` -
     "we dropped the column so it's fine" is the exact failure mode this
@@ -170,6 +174,8 @@ def proxy_hints(df: pd.DataFrame, dimensions: list, alpha=PROXY_ALPHA,
                 "low_expected_share": round(low_share, 4),
                 "low_expected": low_share > LOW_EXPECTED_SHARE,
             })
+    for h in tested:
+        h["n_tests"] = len(tested)
     if correction is None:
         hints = [h for h in tested if h["p_value"] < alpha]
     else:

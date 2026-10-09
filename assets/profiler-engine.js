@@ -930,6 +930,11 @@
     return h.low_expected ? ', small cells (p-value unreliable)' : '';
   }
 
+  // " (m=N pairs)" - the family size an adjusted p was computed over (#821).
+  function proxyFamily(h) {
+    return h.p_adjusted !== undefined && h.n_tests !== undefined ? ' (m=' + h.n_tests + ' pairs)' : '';
+  }
+
   function proxyHints(table, dimensions, alpha, heldOut, multiCorrection) {
     if (alpha === undefined) alpha = PROXY_ALPHA;
     if (!(alpha > 0 && alpha <= 1)) throw new Error('alpha must be in (0, 1], got ' + alpha);
@@ -1000,6 +1005,7 @@
         });
       }
     }
+    tested.forEach(function (h) { h.n_tests = tested.length; });
     if (!multiCorrection) {
       tested.forEach(function (h) { if (h.p_value < alpha) hints.push(h); });
     } else {
@@ -1007,7 +1013,7 @@
       tested.forEach(function (h, idx) {
         if (adjusted[idx] < alpha) {
           hints.push({ a: h.a, b: h.b, p_value: h.p_value, cramers_v: h.cramers_v,
-                       chi2: h.chi2, low_expected_share: h.low_expected_share,
+                       chi2: h.chi2, n_tests: h.n_tests, low_expected_share: h.low_expected_share,
                        low_expected: h.low_expected, p_adjusted: adjusted[idx] });
         }
       });
@@ -1440,7 +1446,7 @@
                               // Opt-in, informational only (issue #738) - see
                               // proxyHints()'s own comment for why this is
                               // kept out of profile()/compare().
-                              proxyHints: proxyHints, proxyNotes: proxyNotes, parseHeldOut: parseHeldOut, buildHeldOut: buildHeldOut,
+                              proxyHints: proxyHints, proxyNotes: proxyNotes, proxyFamily: proxyFamily, parseHeldOut: parseHeldOut, buildHeldOut: buildHeldOut,
                               adjustPValues: adjustPValues,
                               csvField: csvField, csvRow: csvRow, provenanceCsv: provenanceCsv,
                               // publicParams: resolved knobs for an export's

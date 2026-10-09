@@ -85,7 +85,11 @@ def _hint_notes(h) -> str:
     multiple-comparison adjusted p-value (#806), and ", small cells" when
     over 20% of its expected counts are under 5 so the chi-squared p-value is
     unreliable (#810)."""
-    text = f", adj p={h['p_adjusted']:.4g}" if "p_adjusted" in h else ""
+    text = ""
+    if "p_adjusted" in h:
+        text = f", adj p={h['p_adjusted']:.4g}"
+        if "n_tests" in h:
+            text += f" (m={h['n_tests']} pairs)"
     if h.get("low_expected"):
         text += ", small cells (p-value unreliable)"
     return text
@@ -97,10 +101,10 @@ def _write_proxy_rows(writer, hints, side=None) -> None:
     prefix = ["dataset"] if side else []
     adjusted = any("p_adjusted" in h for h in hints)
     writer.writerow(prefix + ["proxy_hint_a", "proxy_hint_b", "p_value", "cramers_v"]
-                    + (["p_adjusted"] if adjusted else []) + ["low_expected"])
+                    + (["p_adjusted"] if adjusted else []) + ["n_tests", "low_expected"])
     for h in hints:
         writer.writerow(([side] if side else []) + [h["a"], h["b"], h["p_value"], h["cramers_v"]]
-                        + ([h.get("p_adjusted")] if adjusted else []) + [h.get("low_expected", False)])
+                        + ([h.get("p_adjusted")] if adjusted else []) + [h.get("n_tests"), h.get("low_expected", False)])
 
 
 def to_csv(result: dict, provenance: dict | None = None) -> str:

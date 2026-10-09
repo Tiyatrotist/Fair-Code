@@ -496,7 +496,7 @@
   function proxyHintItems(hints) {
     return hints.map(function (h) {
       return '<li>' + esc(h.a) + ' ↔ ' + esc(h.b) + ' (χ² p=' + h.p_value.toPrecision(4) +
-        ', Cramér’s V=' + h.cramers_v.toFixed(2) + (h.p_adjusted !== undefined ? ', adj p=' + h.p_adjusted.toPrecision(4) : '') + E.proxyNotes(h) + ')</li>';
+        ', Cramér’s V=' + h.cramers_v.toFixed(2) + (h.p_adjusted !== undefined ? ', adj p=' + h.p_adjusted.toPrecision(4) : '') + E.proxyFamily(h) + E.proxyNotes(h) + ')</li>';
     }).join('');
   }
 
@@ -682,9 +682,9 @@
     [['proxy_hints_a', 'A'], ['proxy_hints_b', 'B']].forEach(function (k) {
       if (cmp[k[0]] && cmp[k[0]].length) {
         var adj = cmp[k[0]].some(function (h) { return h.p_adjusted !== undefined; });
-        out += csvRow([]) + csvRow(['dataset', 'proxy_hint_a', 'proxy_hint_b', 'p_value', 'cramers_v'].concat(adj ? ['p_adjusted'] : [], ['low_expected']));
+        out += csvRow([]) + csvRow(['dataset', 'proxy_hint_a', 'proxy_hint_b', 'p_value', 'cramers_v'].concat(adj ? ['p_adjusted'] : [], ['n_tests', 'low_expected']));
         cmp[k[0]].forEach(function (h) {
-          out += csvRow([k[1], h.a, h.b, h.p_value, h.cramers_v].concat(adj ? [h.p_adjusted] : [], [!!h.low_expected]));
+          out += csvRow([k[1], h.a, h.b, h.p_value, h.cramers_v].concat(adj ? [h.p_adjusted] : [], [h.n_tests, !!h.low_expected]));
         });
       }
     });
@@ -747,7 +747,7 @@
             return '<div class="proxy-hint-row"><span class="proxy-hint-pair">' + esc(h.a) + ' × ' +
               esc(h.b) + '</span><span class="proxy-hint-stats">p ' + h.p_value.toExponential(2) +
               ' · Cramer’s V ' + h.cramers_v.toFixed(4) +
-        (h.p_adjusted !== undefined ? ' · adj p ' + h.p_adjusted.toExponential(2) : '') +
+        (h.p_adjusted !== undefined ? ' · adj p ' + h.p_adjusted.toExponential(2) + E.proxyFamily(h) : '') +
         (h.low_expected ? ' · small cells ⚠' : '') + '</span></div>';
           }).join('') + '</div>'
         : '<p class="section-note">No column pairs are significantly associated (p &lt; ' + alpha + ').</p>');

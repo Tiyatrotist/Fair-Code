@@ -143,6 +143,11 @@ carries `low_expected_share` (share of cells with expected count < 5, 4 dp) and 
 (`true` when that share exceeds 0.2). The terminal/HTML/web output marks such a hint "small cells",
 and the CSV proxy section gains a `low_expected` column. The p-value is still computed and reported.
 
+**Family size (#821).** Every hint also carries `n_tests`, the number of pairs actually tested
+(a pair with a constant column is skipped and does not count), so `p_adjusted` can be re-derived
+from the export (Bonferroni: `min(1, p · n_tests)`). Adjusted hints print "(m=N pairs)" in the
+terminal/HTML/web output, and the CSV proxy section gains an `n_tests` column before `low_expected`.
+
 **Limitation - a dropped column is invisible by construction.** `proxy_hints()` only tests pairs
 drawn from `dimensions`, the columns actually present in the profiled data. If a protected attribute
 was already removed before profiling - "we dropped the column so it's fine" - it can never be one
@@ -543,7 +548,7 @@ each preceded by a blank row and its own header, in this order:
 2. reference baseline (only when `--reference` was used) -
    `dimension,reference_label,expected,actual,delta,reference_deviation`;
 3. proxy hints (only when run) - `proxy_hint_a,proxy_hint_b,p_value,cramers_v`, plus `p_adjusted`
-   when a correction was requested, then `low_expected`;
+   when a correction was requested, then `n_tests`, `low_expected`;
 4. provenance (only with `--csv-provenance` / the web checkbox / MCP `include_provenance`) -
    `provenance_key,provenance_value`, nested objects flattened to dotted keys (`params.min_share`),
    lists as JSON text, `null` as an empty cell. The values are exactly the block `--json` attaches

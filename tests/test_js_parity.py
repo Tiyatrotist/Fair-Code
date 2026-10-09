@@ -826,6 +826,7 @@ def test_python_js_proxy_hints_parity_on_a_correlated_pair(tmp_path):
     # #810: the small-cell diagnostics must agree too
     assert py_hint["low_expected_share"] == js_hint["low_expected_share"]
     assert py_hint["low_expected"] == js_hint["low_expected"]
+    assert py_hint["n_tests"] == js_hint["n_tests"] == 1
 
 
 def test_python_js_proxy_hints_parity_flags_small_expected_cells(tmp_path):
@@ -937,7 +938,7 @@ def test_web_csv_export_matches_python_to_csv(tmp_path):
     result["proxy_hints"] = proxy_hints(df, dims, alpha=0.9)
     with_hints = _run_ui_exports(path, True)["csv"].splitlines()
     py = to_csv(result).splitlines()
-    i = with_hints.index("proxy_hint_a,proxy_hint_b,p_value,cramers_v,low_expected")
+    i = with_hints.index("proxy_hint_a,proxy_hint_b,p_value,cramers_v,n_tests,low_expected")
     assert with_hints[:i] == py[:i]
     assert with_hints[i + 1].startswith("sex,race,") and py[i + 1].startswith("sex,race,")
 
@@ -1002,7 +1003,7 @@ def test_web_compare_csv_and_html_match_python_and_include_proxy_hints(tmp_path)
         return [[norm(c) for c in row] for row in csv.reader(io.StringIO(body))]
 
     assert head(out["plain"]) == head(py)
-    assert "dataset,proxy_hint_a,proxy_hint_b,p_value,cramers_v,low_expected" in out["csv"]
+    assert "dataset,proxy_hint_a,proxy_hint_b,p_value,cramers_v,n_tests,low_expected" in out["csv"]
     assert "Proxy hints - A" in out["html"] and "Proxy hints - B" in out["html"]
 
 
