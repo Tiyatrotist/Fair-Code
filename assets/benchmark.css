@@ -159,6 +159,10 @@
 .bar-fill.neg { opacity: 0.75; }
 
 .bench-chart-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.bench-chart-theme { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono);
+  font-size: 12px; color: var(--muted); }
+.bench-chart-theme select { font-family: var(--mono); font-size: 12px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border2); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
 .bench-figure-block { margin: 0 0 28px; font-size: 13px; }
 .bench-figure-block summary { cursor: pointer; font-family: var(--mono); color: var(--muted); }
 .bench-figure-block img { display: block; max-width: 100%; height: auto; margin-top: 12px;

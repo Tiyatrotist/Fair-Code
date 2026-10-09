@@ -219,6 +219,37 @@ var results = {};
   results.error_after_load = elements.benchError.textContent;
   results.error_hidden_after_load = elements.benchError.hidden;
 
+  if (process.argv[4] === 'chart-theme') {
+    // #813: render the same chart under each export theme and read the SVG back.
+    function pick(field, value) {
+      var sel = createdSelects[field];
+      sel.value = value;
+      (sel._listeners.change || []).forEach(function (f) { f(); });
+    }
+    pick('metric', 'demographic_parity_diff');
+    pick('protected_attribute', 'race');
+    results.themes = {};
+    ['page', 'light', 'dark', 'transparent'].forEach(function (theme) {
+      elements.benchChartThemeSelect.value = theme;
+      lastBlob = null;
+      elements.benchChartSvgBtn.click();
+      results.themes[theme] = lastBlob;
+    });
+    // a page whose resolved CSS variables are dark: 'page' must follow them
+    global.getComputedStyle = function () {
+      var vars = { '--bg': ' #15130d ', '--text': '#cfc7b0', '--muted': '#8d8367',
+        '--bias-track-bg': '#242013', '--border2': '#443e2d', '--accent': '#cf6f49', '--accent3': '#79b294' };
+      return { getPropertyValue: function (n) { return vars[n] || ''; } };
+    };
+    global.document.documentElement = {};
+    elements.benchChartThemeSelect.value = 'page';
+    lastBlob = null;
+    elements.benchChartSvgBtn.click();
+    results.themes.page_dark_vars = lastBlob;
+    process.stdout.write(JSON.stringify(results));
+    return;
+  }
+
   if (process.argv[4] === 'load-only') {
     // Read back the significance toggle's state on whichever tab the URL opened (#819).
     results.sig_parent_hidden = elements.significantOnlyInput.parentElement.hidden;
@@ -577,3 +608,34 @@ def test_benchmark_dashboard_summary_tab_has_a_significance_filter():
     restored = _run_dom_stub("?tab=summary&sig=1", mode="load-only")
     assert restored["sig_checked"] is True
     assert restored["summary_unfiltered"].startswith(f"{len(every_model):,} of {len(summary):,} rows shown")
+
+
+def test_benchmark_dashboard_chart_export_follows_the_chosen_colours():
+    """#813: the SVG/PNG export no longer hard-codes the light tokens - it follows the
+    page's resolved CSS variables by default and offers Light / Dark / Transparent."""
+    r = _run_dom_stub("", mode="chart-theme")
+    themes = r["themes"]
+    light, dark = ('fill="#f4f1e8"', "#a63a22"), ('fill="#15130d"', "#cf6f49")
+
+    assert all(token in themes["light"] for token in light)
+    assert all(token in themes["dark"] for token in dark)
+    assert "#f4f1e8" not in themes["dark"] and "#a63a22" not in themes["dark"]
+    assert 'stroke="#443e2d"' in themes["dark"]  # signed metric -> the dark axis colour
+
+    # transparent: no background rect, light ink so it reads on a white slide
+    assert 'width="100%" height="100%"' not in themes["transparent"]
+    assert 'fill="#36321f"' in themes["transparent"]
+
+    # page: light fallback with no DOM styles, and the page's own variables when present
+    assert all(token in themes["page"] for token in light)
+    assert all(token in themes["page_dark_vars"] for token in dark)
+    assert "#f4f1e8" not in themes["page_dark_vars"]
+
+
+def test_benchmark_dashboard_chart_theme_control_is_wired():
+    html = (REPO_ROOT / "benchmark.html").read_text(encoding="utf-8")
+    js = (REPO_ROOT / "assets" / "benchmark-dashboard.js").read_text(encoding="utf-8")
+    assert 'id="benchChartThemeSelect"' in html
+    for value in ("page", "light", "dark", "transparent"):
+        assert f'<option value="{value}"' in html
+    assert "getComputedStyle(document.documentElement)" in js

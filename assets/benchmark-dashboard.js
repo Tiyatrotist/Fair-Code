@@ -48,6 +48,7 @@
   var chartButtons = document.getElementById('benchChartButtons');
   var chartSvgBtn = document.getElementById('benchChartSvgBtn');
   var chartPngBtn = document.getElementById('benchChartPngBtn');
+  var chartThemeSelect = document.getElementById('benchChartThemeSelect');
   var figureBlock = document.getElementById('benchFigureBlock');
   var figureImg = document.getElementById('benchFigureImg');
   var tabButtons = Array.prototype.slice.call(document.querySelectorAll('.bench-tab'));
@@ -507,27 +508,62 @@
     });
   }
 
-  function chartToSvg(model, title) {
+  // Colours for the exported chart (#813): the site's light and dark tokens
+  // (benchmark.html :root / html[data-theme="dark"]), keyed by role.
+  var CHART_PALETTES = {
+    light: { bg: '#f4f1e8', text: '#36321f', muted: '#7d7459', track: '#e2dcc9',
+             axis: '#bdb59c', bad: '#a63a22', good: '#2f6b4f' },
+    dark: { bg: '#15130d', text: '#cfc7b0', muted: '#8d8367', track: '#242013',
+            axis: '#443e2d', bad: '#cf6f49', good: '#79b294' }
+  };
+
+  // The palette the on-screen chart is using right now, read from the page's
+  // resolved CSS variables; falls back to the light tokens where a variable (or
+  // getComputedStyle itself) is unavailable.
+  function pagePalette() {
+    var palette = Object.assign({}, CHART_PALETTES.light);
+    try {
+      var cs = getComputedStyle(document.documentElement);
+      var vars = { bg: '--bg', text: '--text', muted: '--muted', track: '--bias-track-bg',
+                   axis: '--border2', bad: '--accent', good: '--accent3' };
+      Object.keys(vars).forEach(function (role) {
+        var v = cs.getPropertyValue(vars[role]).trim();
+        if (v) palette[role] = v;
+      });
+    } catch (e) { /* no DOM styles (tests, sandboxed frames) */ }
+    return palette;
+  }
+
+  // theme: 'page' (default - match what is on screen), 'light', 'dark', or
+  // 'transparent' (light ink, no background rect, for dropping onto a slide).
+  function chartPalette(theme) {
+    if (theme === 'light' || theme === 'dark') return CHART_PALETTES[theme];
+    if (theme === 'transparent') return Object.assign({}, CHART_PALETTES.light, { bg: null });
+    return pagePalette();
+  }
+
+  function chartToSvg(model, title, theme) {
     var LABEL_W = 380, TRACK_W = 400, ROW_H = 24, TOP = 34, W = LABEL_W + TRACK_W + 130;
     var H = TOP + model.bars.length * ROW_H + 12;
+    var c = chartPalette(theme);
     var out = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H +
       '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-labelledby="t"><title id="t">' + svgEsc(title) + '</title>' +
-      '<rect width="100%" height="100%" fill="#f4f1e8"/>' +
-      '<text x="12" y="22" font-family="monospace" font-size="13" fill="#36321f">' + svgEsc(title) + '</text>';
+      (c.bg ? '<rect width="100%" height="100%" fill="' + svgEsc(c.bg) + '"/>' : '') +
+      '<text x="12" y="22" font-family="monospace" font-size="13" fill="' + svgEsc(c.text) + '">' + svgEsc(title) + '</text>';
     if (model.signed) {
       out += '<line x1="' + (LABEL_W + TRACK_W / 2) + '" y1="' + (TOP - 4) + '" x2="' + (LABEL_W + TRACK_W / 2) +
-        '" y2="' + (H - 8) + '" stroke="#bdb59c"/>';
+        '" y2="' + (H - 8) + '" stroke="' + svgEsc(c.axis) + '"/>';
     }
     model.bars.forEach(function (bar, i) {
       var y = TOP + i * ROW_H;
       var label = bar.label.length > 54 ? bar.label.slice(0, 53) + '…' : bar.label;
       var x = LABEL_W + TRACK_W * bar.offset / 100, w = TRACK_W * bar.width / 100;
-      out += '<text x="12" y="' + (y + 14) + '" font-family="monospace" font-size="11" fill="#36321f">' +
+      out += '<text x="12" y="' + (y + 14) + '" font-family="monospace" font-size="11" fill="' + svgEsc(c.text) + '">' +
         svgEsc(label) + '</text>' +
-        '<rect x="' + LABEL_W + '" y="' + (y + 3) + '" width="' + TRACK_W + '" height="14" rx="3" fill="#e2dcc9"/>' +
+        '<rect x="' + LABEL_W + '" y="' + (y + 3) + '" width="' + TRACK_W + '" height="14" rx="3" fill="' + svgEsc(c.track) + '"/>' +
         '<rect x="' + x.toFixed(1) + '" y="' + (y + 3) + '" width="' + w.toFixed(1) + '" height="14" rx="3" fill="' +
-        (bar.cls === 'bad' ? '#a63a22' : '#2f6b4f') + '"' + (bar.neg ? ' opacity="0.75"' : '') + '/>' +
-        '<text x="' + (LABEL_W + TRACK_W + 10) + '" y="' + (y + 14) + '" font-family="monospace" font-size="11" fill="#7d7459">' +
+        svgEsc(bar.cls === 'bad' ? c.bad : c.good) + '"' + (bar.neg ? ' opacity="0.75"' : '') + '/>' +
+        '<text x="' + (LABEL_W + TRACK_W + 10) + '" y="' + (y + 14) + '" font-family="monospace" font-size="11" fill="' + svgEsc(c.muted) + '">' +
         (bar.value === null ? 'n/a' : bar.value.toFixed(4)) + '</text>';
     });
     return out + '</svg>';
@@ -555,7 +591,8 @@
     var kind = state.tab;
     if (!state[kind] || !chartReady(kind)) return null;
     var rows = sortedRows(kind, filteredRows(kind));
-    return rows.length ? chartToSvg(chartModel(kind, rows), chartTitle(kind)) : null;
+    var theme = chartThemeSelect && chartThemeSelect.value ? chartThemeSelect.value : 'page';
+    return rows.length ? chartToSvg(chartModel(kind, rows), chartTitle(kind), theme) : null;
   }
 
   chartSvgBtn.addEventListener('click', function () {
