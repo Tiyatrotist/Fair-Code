@@ -442,10 +442,10 @@
     var alpha = readProxyAlpha(document.getElementById('proxyAlphaInput'), host);
     if (alpha === null) return;
     // Optional held-out columns (#781, #801, #802), mirroring --proxy-hints-with.
-    var heldOut = null;
+    var heldOut = null, heldNotes = [];
     try {
       var specs = await heldOutControl.collect();
-      if (specs.length) heldOut = await E.buildHeldOut(specs, currentTable);
+      if (specs.length) heldOut = await E.buildHeldOut(specs, currentTable, heldNotes);
       currentHeldSpecs = specs;
     } catch (err) {
       currentHeldSpecs = [];
@@ -459,6 +459,7 @@
     currentResult.proxy_hints = hints;
     if (!hints.length) {
       host.innerHTML = '<p class="section-note">No column pairs are significantly associated (p &lt; ' + alpha + ').</p>';
+      appendHeldNotes(host, heldNotes);
       return;
     }
     var list = document.createElement('div');
@@ -474,6 +475,17 @@
       list.appendChild(row);
     });
     host.appendChild(list);
+    appendHeldNotes(host, heldNotes);
+  }
+
+  // Ignored-sheet notes for held-out .xlsx files (#816).
+  function appendHeldNotes(host, notes) {
+    notes.forEach(function (note) {
+      var p = document.createElement('p');
+      p.className = 'section-note';
+      p.textContent = note;
+      host.appendChild(p);
+    });
   }
 
   // ── Column mapping (manual override, issue #62) ─────────────────────────

@@ -1229,8 +1229,9 @@ def test_held_out_rows_control_is_wired_into_profile_and_compare_views():
     assert html.index("profiler-heldout.js") < html.index("profiler-compare.js")
     ui = (REPO_ROOT / "assets" / "profiler-ui.js").read_text(encoding="utf-8")
     cmp_js = (REPO_ROOT / "assets" / "profiler-compare.js").read_text(encoding="utf-8")
-    assert "E.buildHeldOut(specs, currentTable)" in ui
-    assert "E.buildHeldOut(specsA, slot.A.table)" in cmp_js and "E.buildHeldOut(specsB, slot.B.table)" in cmp_js
+    assert "E.buildHeldOut(specs, currentTable, heldNotes)" in ui
+    assert "E.buildHeldOut(specsA, slot.A.table, heldNotes)" in cmp_js
+    assert "E.buildHeldOut(specsB, slot.B.table, heldNotes)" in cmp_js
     control = (REPO_ROOT / "assets" / "profiler-heldout.js").read_text(encoding="utf-8")
     assert ".xlsx" in control and "file.arrayBuffer()" in control
 
@@ -1262,6 +1263,34 @@ def test_build_held_out_handles_several_columns_formats_and_collisions(tmp_path)
     assert out["map"] == {"race": ["A", "A", "B", "B"], "sex": ["m", "f", "m", "f"],
                           "age": ["old", "old", "young", "young"]}
     assert "already supplied" in out["dup"]
+
+
+def test_build_held_out_reports_ignored_xlsx_sheets(tmp_path):
+    """#816: only the first sheet of a held-out workbook is read; the notes array gets
+    an ignored-sheets line, and a column that lives on a later sheet gets an error
+    that names the skipped sheets instead of a bare "not found"."""
+    main_csv = tmp_path / "main.csv"
+    main_csv.write_text("zip\n111\n111\n222\n222\n", encoding="utf-8")
+    script = (
+        "require(process.argv[1]);var fs=require('fs');var E=globalThis.FairCodeProfiler;"
+        "globalThis.XLSX={read:function(){return {SheetNames:['First','Second','Third'],Sheets:{First:{},Second:{},Third:{}}}},"
+        "utils:{sheet_to_json:function(){return [{age:'old'},{age:'old'},{age:'young'},{age:'young'}]}}};"
+        "var t=E.parseCSV(fs.readFileSync(process.argv[2],'utf-8'));var out={notes:[]};"
+        "(async function(){"
+        "out.map=await E.buildHeldOut([{name:'c.xlsx',column:'age',data:new ArrayBuffer(1)}],t,out.notes);"
+        "try{await E.buildHeldOut([{name:'c.xlsx',column:'race',data:new ArrayBuffer(1)}],t,[])}"
+        "catch(e){out.err=e.message}"
+        "out.plain=await E.buildHeldOut([{name:'a.csv',column:'race',data:'race\\nA\\nA\\nB\\nB\\n'}],t);"
+        "process.stdout.write(JSON.stringify(out));})();"
+    )
+    done = subprocess.run(
+        ["node", "-e", script, str(REPO_ROOT / "assets" / "profiler-engine.js"), str(main_csv)],
+        capture_output=True, text=True, encoding="utf-8", check=True)
+    out = json.loads(done.stdout)
+    assert out["map"] == {"age": ["old", "old", "young", "young"]}
+    assert out["notes"] == ["c.xlsx: only the first sheet 'First' was read; 'Second', 'Third' ignored"]
+    assert "not found" in out["err"] and "'Second', 'Third' ignored" in out["err"]
+    assert out["plain"] == {"race": ["A", "A", "B", "B"]}
 
 
 def test_held_out_control_adds_rows_collects_specs_and_validates():

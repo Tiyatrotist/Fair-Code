@@ -730,11 +730,11 @@
     var alpha = readProxyAlpha(document.getElementById('compareProxyAlphaInput'), proxyResultsEl);
     if (alpha === null) return;
     var correction = document.getElementById('compareProxyCorrectionInput').value || null;
-    var heldA = null, heldB = null;
+    var heldA = null, heldB = null, heldNotes = [];
     try {
       var specsA = await heldOutA.collect(), specsB = await heldOutB.collect();
-      if (specsA.length) heldA = await E.buildHeldOut(specsA, slot.A.table);
-      if (specsB.length) heldB = await E.buildHeldOut(specsB, slot.B.table);
+      if (specsA.length) heldA = await E.buildHeldOut(specsA, slot.A.table, heldNotes);
+      if (specsB.length) heldB = await E.buildHeldOut(specsB, slot.B.table, heldNotes);
       heldSpecsA = specsA;
       heldSpecsB = specsB;
     } catch (err) {
@@ -756,7 +756,7 @@
         (h.low_expected ? ' · small cells ⚠' : '') + '</span></div>';
           }).join('') + '</div>'
         : '<p class="section-note">No column pairs are significantly associated (p &lt; ' + alpha + ').</p>');
-    }).join('');
+    }).join('') + heldNotes.map(function (n) { return '<p class="section-note">' + esc(n) + '</p>'; }).join('');
   }
 
   function compareReportBaseName() {

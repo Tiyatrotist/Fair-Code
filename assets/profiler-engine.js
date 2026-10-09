@@ -907,14 +907,35 @@
   // Every spec goes through parseHeldOut, with the running map as `already`,
   // so two specs naming the same column are rejected like the CLI's repeated
   // --proxy-hints-with.
-  async function buildHeldOut(specs, table) {
+  //
+  // Only an .xlsx workbook's first sheet is read (#816). When `notes` (an array)
+  // is passed, a note is pushed for every workbook with other sheets, like the
+  // CLI's per-held-out-file "other sheet(s) ignored" line; and if the requested
+  // column is missing from such a workbook, the error says which sheets were skipped.
+  async function buildHeldOut(specs, table, notes) {
     var out = {};
     for (var i = 0; i < specs.length; i++) {
-      var spec = specs[i], heldTable;
-      if (/\.xlsx$/i.test(spec.name)) heldTable = (await parseXLSX(spec.data)).table;
+      var spec = specs[i], heldTable, sheetNote = null;
+      if (/\.xlsx$/i.test(spec.name)) {
+        var sheets = await parseXLSX(spec.data);
+        heldTable = sheets.table;
+        if (sheets.ignoredSheets.length > 0) {
+          sheetNote = spec.name + ": only the first sheet '" + sheets.sheetName + "' was read; " +
+            sheets.ignoredSheets.map(function (n) { return "'" + n + "'"; }).join(', ') +
+            ' ignored';
+          if (notes) notes.push(sheetNote);
+        }
+      }
       else if (/\.json$/i.test(spec.name)) heldTable = parseJSON(spec.data);
       else heldTable = parseCSV(spec.data);
-      out[spec.column] = parseHeldOut(heldTable, spec.column, table, out);
+      try {
+        out[spec.column] = parseHeldOut(heldTable, spec.column, table, out);
+      } catch (err) {
+        if (sheetNote && heldTable.columns.indexOf(spec.column) === -1) {
+          err.message += ' (' + sheetNote + ')';
+        }
+        throw err;
+      }
     }
     return out;
   }
