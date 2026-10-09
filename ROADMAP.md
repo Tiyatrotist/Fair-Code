@@ -177,6 +177,7 @@ Go deeper on measurement - fairness dashboards, interactive notebooks, and stati
 - [ ] Encodings end to end: a web encoding picker (#857) and the encoding recorded in provenance (#858)
 - [ ] Proxy follow-ups: composite/normalised held-out keys (#859), provenance on the MCP `proxy_hints` tool (#860), an exact-test fallback for small cells (#861)
 - [ ] Age handling: convert birth-year columns to ages (#862) and flag negative age sentinels (#863)
+- [ ] CLI gaps: wire the `--csv-bom` flag (#867), surface per-profile data-quality flags in `compare` (#868), keep colon-named held-out columns working (#869), and warn when `--encoding` is ignored (#870)
 - [ ] Dashboard and compare: a per-tab significance toggle (#864), a colour-blind-safe chart cue (#865), and rename suggestions for one-sided dimensions in `compare` (#866)
 
 ---

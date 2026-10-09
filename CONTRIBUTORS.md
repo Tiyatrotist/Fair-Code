@@ -461,7 +461,7 @@ Made the web engine's `ageToNumeric()` parse scientific-notation, `inf` and very
 
 **1 merged PR · 1 commit · first merged 2026-10-07**
 
-Added `faircode profile --csv-bom`, which writes a UTF-8 byte-order mark (including to stdout) so Excel on Windows opens the CSV with non-ASCII labels intact; the default is unchanged ([#850](https://github.com/yakew7/Fair-Code/pull/850), closing issue #846).
+Added a `bom` option to the CLI's CSV writer so a UTF-8 byte-order mark can be emitted for Excel on Windows ([#850](https://github.com/yakew7/Fair-Code/pull/850), addressing issue #846). The `--csv-bom` flag that would expose it was not part of the PR, so it is tracked separately in #867.
 
 ### Rayan Abdul Cader - [@minutechreview](https://github.com/minutechreview)
 
