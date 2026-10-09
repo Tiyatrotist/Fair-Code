@@ -1226,6 +1226,33 @@ def test_csv_provenance_needs_csv_and_covers_compare(tmp_path, capsys):
     assert "dataset_hash_a" in text and "dataset_hash_b" in text
 
 
+def test_csv_bom_prefixes_file_with_utf8_bom(tmp_path, capsys):
+    """#867: --csv-bom wires the unused bom= helper so Excel sees EF BB BF."""
+    path = tmp_path / "a.csv"
+    path.write_text("sex\nM\nF\nM\nF\n", encoding="utf-8")
+    out = tmp_path / "o.csv"
+    assert main(["profile", str(path), "--csv", str(out)]) == 0
+    assert not out.read_bytes().startswith(b"\xef\xbb\xbf")
+    assert main(["profile", str(path), "--csv", str(out), "--csv-bom"]) == 0
+    assert out.read_bytes().startswith(b"\xef\xbb\xbf")
+    # compare path too
+    cout = tmp_path / "c.csv"
+    assert main(["compare", str(path), str(path), "--csv", str(cout), "--csv-bom"]) == 0
+    assert cout.read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+def test_csv_bom_stdout_starts_with_feff_and_needs_csv(tmp_path, capsys):
+    """#867: --csv - --csv-bom writes U+FEFF first; flag alone is rejected."""
+    path = tmp_path / "a.csv"
+    path.write_text("sex\nM\nF\nM\nF\n", encoding="utf-8")
+    assert main(["profile", str(path), "--csv-bom"]) == 2
+    assert "--csv-bom needs --csv" in capsys.readouterr().err
+    assert main(["profile", str(path), "--csv", "-", "--csv-bom"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("\ufeff")
+    assert "dimension" in out
+
+
 def test_fail_under_error_explains_a_header_only_file_truthfully(tmp_path, capsys):
     """#839: columns WERE detected; what is missing is data, and the error says so."""
     path = tmp_path / "hdr.csv"

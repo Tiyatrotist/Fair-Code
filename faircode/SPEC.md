@@ -602,3 +602,8 @@ booleans are never touched, so real negative values stay numeric.
 **stdout.** `--csv -` streams the CSV to stdout, suppresses the terminal report so the stream stays
 pure CSV, and is rejected together with `--json` (both would write to stdout).
 
+**BOM.** `--csv-bom` (CLI only; needs `--csv`) prefixes the export with a UTF-8 byte-order mark
+(`U+FEFF` / bytes `EF BB BF`) so Excel on Windows detects UTF-8 and keeps non-ASCII labels intact.
+Without the flag the file stays plain UTF-8, matching the pre-#846 behaviour. On `--csv -` the BOM
+is written as the character U+FEFF before the CSV text.
+
