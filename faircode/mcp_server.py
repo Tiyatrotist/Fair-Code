@@ -30,6 +30,7 @@ withholding the real text.
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 from pathlib import Path
@@ -81,7 +82,7 @@ _RESULTS_ROUND_DECIMALS = 6
 _RESULTS_NUMERIC_COLUMNS = ("value", "ci_low", "ci_high", "p_value")
 
 
-def _read_table_or_raise(path: str):
+def _read_table_or_raise(path: str, encoding: str | None = None):
     """Read a table, translating loader failures into a clear message instead
     of a raw pandas/parser traceback. Mirrors cli.py's _read_or_exit, minus
     the SystemExit - a tool function should raise, not exit the process.
@@ -94,9 +95,13 @@ def _read_table_or_raise(path: str):
     if path == "-":
         raise ValueError("stdin input ('-') is not supported over MCP - pass a real file path instead")
     try:
-        return read_table(path)
+        return read_table(path, encoding=encoding)
     except FileNotFoundError:
         raise FileNotFoundError(f"file not found: {path}") from None
+    except UnicodeDecodeError as exc:
+        raise RuntimeError(
+            f"could not read dataset {path}: not valid {encoding or 'utf-8'} ({exc}); "
+            f"pass encoding (e.g. 'latin-1', 'cp1252', 'utf-16')") from exc
     except RuntimeError:
         raise
     except Exception as exc:  # noqa: BLE001 - surface any parse failure plainly
@@ -136,7 +141,7 @@ def _check_overrides(overrides, known_columns):
 def _build_opts(min_share=None, intersection_floor=None, imbalance_flag=None,
                 missing_flag=None, min_group_size=None, cross=None,
                 reference_path=None, max_categorical_card=None,
-                max_dimension_groups=None):
+                max_dimension_groups=None, encoding=None):
     opts = {
         "min_share": min_share,
         "intersection_floor": intersection_floor,
@@ -153,7 +158,7 @@ def _build_opts(min_share=None, intersection_floor=None, imbalance_flag=None,
             raise ValueError(f"cross needs two different columns, got '{cross[0]}' twice")
         opts["cross"] = list(cross)
     if reference_path:
-        opts["reference"] = parse_reference(_read_table_or_raise(reference_path))
+        opts["reference"] = parse_reference(_read_table_or_raise(reference_path, encoding))
     return opts
 
 
@@ -177,13 +182,14 @@ def _profile_dataset_impl(path, overrides=None, cross=None, reference_path=None,
                           min_share=None, intersection_floor=None,
                           imbalance_flag=None, missing_flag=None,
                           min_group_size=None, include_provenance=True,
-                          max_categorical_card=None, max_dimension_groups=None):
+                          max_categorical_card=None, max_dimension_groups=None,
+                          encoding=None):
     overrides = overrides or {}
-    df = _read_table_or_raise(path)
+    df = _read_table_or_raise(path, encoding)
     _check_overrides(overrides, df.columns)
     opts = _build_opts(min_share, intersection_floor, imbalance_flag,
                        missing_flag, min_group_size, cross, reference_path,
-                       max_categorical_card, max_dimension_groups)
+                       max_categorical_card, max_dimension_groups, encoding)
     result = profile(df, overrides, opts)
     note = _sheet_note(path)
     if note:
@@ -202,10 +208,12 @@ def _compare_datasets_impl(path_a, path_b, overrides=None,
                            min_group_size=None, include_provenance=True,
                            proxy_hints=False, max_categorical_card=None,
                            max_dimension_groups=None, held_out_with_a=None,
-                           held_out_with_b=None, alpha=None, correction=None):
+                           held_out_with_b=None, alpha=None, correction=None,
+                           encoding=None):
     overrides = overrides or {}
-    df_a = _read_table_or_raise(path_a)
-    df_b = _read_table_or_raise(path_b)
+    df_a = _read_table_or_raise(path_a, encoding)
+    df_b = _read_table_or_raise(path_b, encoding)
+    read_held = functools.partial(_read_table_or_raise, encoding=encoding)
     if (held_out_with_a or held_out_with_b) and not proxy_hints:
         raise ValueError("held_out_with_a/held_out_with_b need proxy_hints=true")
     _check_overrides(overrides, set(df_a.columns) | set(df_b.columns))
@@ -224,9 +232,9 @@ def _compare_datasets_impl(path_a, path_b, overrides=None,
     if proxy_hints:
         kw = {} if alpha is None else {"alpha": alpha}
         kw["correction"] = correction
-        held_a = parse_held_out_specs(held_out_with_a, df_a, _read_table_or_raise,
+        held_a = parse_held_out_specs(held_out_with_a, df_a, read_held,
                                       flag="held_out_with_a") if held_out_with_a else None
-        held_b = parse_held_out_specs(held_out_with_b, df_b, _read_table_or_raise,
+        held_b = parse_held_out_specs(held_out_with_b, df_b, read_held,
                                       flag="held_out_with_b") if held_out_with_b else None
         result["proxy_hints_a"] = compute_proxy_hints(df_a, profile_a["dimensions"],
                                                       held_out=held_a, **kw)
@@ -241,7 +249,7 @@ def _compare_datasets_impl(path_a, path_b, overrides=None,
 
 
 def _proxy_hints_impl(path, overrides=None, held_out_with=None, alpha=None,
-                      correction=None):
+                      correction=None, encoding=None):
     """`overrides` forces a column's detected kind the same way profile()'s
     own `overrides` does; no other threshold knob affects this tool -
     proxy_hints() (faircode/proxy.py) tests every detected dimension
@@ -267,10 +275,10 @@ def _proxy_hints_impl(path, overrides=None, held_out_with=None, alpha=None,
     always exactly one JSON object - and makes "no hints found" unambiguous.
     """
     overrides = overrides or {}
-    df = _read_table_or_raise(path)
+    df = _read_table_or_raise(path, encoding)
     _check_overrides(overrides, df.columns)
     result = profile(df, overrides)
-    held_out = parse_held_out_specs(held_out_with, df, _read_table_or_raise,
+    held_out = parse_held_out_specs(held_out_with, df, functools.partial(_read_table_or_raise, encoding=encoding),
                                     flag="held_out_with") if held_out_with else None
     kw = {} if alpha is None else {"alpha": alpha}
     kw["correction"] = correction
@@ -418,6 +426,7 @@ def build_server():
                         include_provenance: bool = True,
                         max_categorical_card: int | None = None,
                         max_dimension_groups: int | None = None,
+                        encoding: str | None = None,
                         format: str = "json") -> dict:
         """Profile a tabular dataset (.csv/.tsv/.xlsx/.json/.parquet) for
         demographic representation: per-dimension imbalance/missing/skew,
@@ -437,6 +446,10 @@ def build_server():
         max_dimension_groups=50) when set, matching the CLI's
         --max-categorical-card/--max-dimension-groups.
 
+        `encoding` names the text encoding of delimited files (e.g. "latin-1",
+        "cp1252", "utf-16"); default is a UTF-8/16/32 byte-order mark if present,
+        else utf-8. Same on `compare_datasets` and `proxy_hints`.
+
         `include_provenance` (default true) attaches a provenance block -
         faircode version, a SHA-256 hash of the dataset file, and the resolved
         thresholds - so the result can be tied back to exactly what produced
@@ -452,7 +465,7 @@ def build_server():
                 path, overrides, cross, reference_path, min_share,
                 intersection_floor, imbalance_flag, missing_flag,
                 min_group_size, include_provenance, max_categorical_card,
-                max_dimension_groups), format, to_csv)
+                max_dimension_groups, encoding), format, to_csv)
         except (ValueError, FileNotFoundError, RuntimeError) as exc:
             raise _as_tool_error(exc) from exc
 
@@ -472,6 +485,7 @@ def build_server():
                          held_out_with_b: list[str] | None = None,
                          alpha: float | None = None,
                          correction: str | None = None,
+                         encoding: str | None = None,
                          format: str = "json") -> dict:
         """Compare two tabular datasets (e.g. a training set and a production
         snapshot) for representation drift: which dimensions/groups appeared,
@@ -503,7 +517,8 @@ def build_server():
                 path_a, path_b, overrides, min_share, intersection_floor,
                 imbalance_flag, missing_flag, min_group_size, include_provenance,
                 proxy_hints, max_categorical_card, max_dimension_groups,
-                held_out_with_a, held_out_with_b, alpha, correction), format, compare_to_csv)
+                held_out_with_a, held_out_with_b, alpha, correction, encoding),
+                format, compare_to_csv)
         except (ValueError, FileNotFoundError, RuntimeError) as exc:
             raise _as_tool_error(exc) from exc
 
@@ -511,7 +526,8 @@ def build_server():
     def proxy_hints(path: str, overrides: dict[str, str] | None = None,
                     held_out_with: list[str] | None = None,
                     alpha: float | None = None,
-                    correction: str | None = None) -> dict:
+                    correction: str | None = None,
+                    encoding: str | None = None) -> dict:
         """Flag pairs of detected demographic columns that are strongly
         statistically associated (chi-squared test of independence, p < `alpha`,
         default 0.05, in (0, 1])
@@ -537,7 +553,7 @@ def build_server():
         section 3 and issue #328.
         """
         try:
-            return _proxy_hints_impl(path, overrides, held_out_with, alpha, correction)
+            return _proxy_hints_impl(path, overrides, held_out_with, alpha, correction, encoding)
         except (ValueError, FileNotFoundError, RuntimeError) as exc:
             raise _as_tool_error(exc) from exc
 

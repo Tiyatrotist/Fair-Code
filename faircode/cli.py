@@ -25,6 +25,8 @@ command additionally requires the optional 'benchmark' extra
 from __future__ import annotations
 
 import argparse
+import codecs
+import functools
 import hashlib
 import io
 import sys
@@ -90,7 +92,7 @@ def _check_map_columns(overrides, known_columns):
         raise SystemExit(2)
 
 
-def _build_held_out(specs, df):
+def _build_held_out(specs, df, encoding=None):
     """Parse repeated --proxy-hints-with PATH=COLUMN flags via proxy.py's
     shared parse_held_out_specs, printing a plain error and raising
     SystemExit(2) on any parse failure, missing column, or row-count
@@ -112,7 +114,7 @@ def _build_held_out(specs, df):
                     file=sys.stderr,
                 )
     try:
-        return parse_held_out_specs(specs, df, _read_or_exit)
+        return parse_held_out_specs(specs, df, functools.partial(_read_or_exit, encoding=encoding))
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(2)
@@ -162,12 +164,29 @@ def _write_csv_export(path, text, bom=False):
     return False
 
 
-def _read_or_exit(path: str):
+def _check_encoding(name):
+    """Reject an unknown --encoding name up front (#843)."""
+    if name is None:
+        return
+    try:
+        codecs.lookup(name)
+    except LookupError:
+        print(f"error: unknown --encoding '{name}' (try utf-8, latin-1, cp1252 or utf-16)",
+              file=sys.stderr)
+        raise SystemExit(2)
+
+
+def _read_or_exit(path: str, encoding: str | None = None):
     """Read a table, or print a plain error and raise SystemExit(2)."""
     try:
-        return read_table(path)
+        return read_table(path, encoding=encoding) if encoding else read_table(path)
     except FileNotFoundError:
         print(f"error: file not found: {path}", file=sys.stderr)
+        raise SystemExit(2)
+    except UnicodeDecodeError as exc:
+        used = encoding or "utf-8"
+        print(f"error: could not read dataset {path}: not valid {used} ({exc}); "
+              f"pass --encoding NAME (e.g. latin-1, cp1252, utf-16)", file=sys.stderr)
         raise SystemExit(2)
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -241,6 +260,10 @@ def main(argv: list[str] | None = None) -> int:
                    help="raise/lower the group-count cutoff past which a non-geography "
                         "dimension is dropped as identifier/date-like "
                         "(default: profiler.MAX_DIMENSION_GROUPS)")
+    p.add_argument("--encoding", metavar="NAME",
+                   help="text encoding of the dataset (and any held-out/reference files), "
+                        "e.g. latin-1, cp1252, utf-16 (default: a UTF-8/16/32 byte-order "
+                        "mark if present, else utf-8)")
     p.add_argument("--no-provenance", action="store_true",
                    help="omit the provenance block from --json output "
                         "(restores the pre-2.1 export shape exactly)")
@@ -297,6 +320,10 @@ def main(argv: list[str] | None = None) -> int:
                         "(default: profiler.MAX_DIMENSION_GROUPS)")
     c.add_argument("--fail-on-drift", action="store_true",
                    help="exit 1 when any dimension shows drift or the overall score drops")
+    c.add_argument("--encoding", metavar="NAME",
+                   help="text encoding of the dataset (and any held-out/reference files), "
+                        "e.g. latin-1, cp1252, utf-16 (default: a UTF-8/16/32 byte-order "
+                        "mark if present, else utf-8)")
     c.add_argument("--no-provenance", action="store_true",
                    help="omit the provenance block from --json output "
                         "(restores the pre-2.1 export shape exactly)")
@@ -319,6 +346,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="skip rendering figures/*.png (no matplotlib needed)")
 
     args = parser.parse_args(argv)
+    if args.command in ("profile", "compare"):
+        _check_encoding(args.encoding)
 
     if args.command == "profile":
         if args.sample and args.csv:
@@ -368,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
             args.csv = SAMPLE_FILENAME  # for any downstream display purposes
             sheet_info = None
         else:
-            df = _read_or_exit(args.csv)
+            df = _read_or_exit(args.csv, args.encoding)
             sheet_info = get_xlsx_sheet_info(args.csv)
         if sheet_info is not None:
             sheet_name, ignored_sheets = sheet_info
@@ -401,7 +430,7 @@ def main(argv: list[str] | None = None) -> int:
             opts["cross"] = parts
         if args.reference:
             try:
-                opts["reference"] = parse_reference(_read_or_exit(args.reference))
+                opts["reference"] = parse_reference(_read_or_exit(args.reference, args.encoding))
             except ValueError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 return 2
@@ -415,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
         if args.proxy_hints or args.proxy_hints_with:
-            held_out = _build_held_out(args.proxy_hints_with, df)
+            held_out = _build_held_out(args.proxy_hints_with, df, args.encoding)
             try:
                 result["proxy_hints"] = proxy_hints(df, result["dimensions"], alpha=_alpha(args), correction=args.proxy_correction, held_out=held_out)
             except RuntimeError as exc:
@@ -517,8 +546,8 @@ def main(argv: list[str] | None = None) -> int:
             "max_categorical_card": args.max_categorical_card,
             "max_dimension_groups": args.max_dimension_groups,
         }
-        df_a = _read_or_exit(args.csv_a)
-        df_b = _read_or_exit(args.csv_b)
+        df_a = _read_or_exit(args.csv_a, args.encoding)
+        df_b = _read_or_exit(args.csv_b, args.encoding)
         _check_map_columns(overrides, set(df_a.columns) | set(df_b.columns))
 
         for path in (args.csv_a, args.csv_b):
@@ -541,8 +570,8 @@ def main(argv: list[str] | None = None) -> int:
         result = compare(profile_a, profile_b, name_a=args.csv_a, name_b=args.csv_b)
 
         if args.proxy_hints or args.proxy_hints_with_a or args.proxy_hints_with_b:
-            held_out_a = _build_held_out(args.proxy_hints_with_a, df_a)
-            held_out_b = _build_held_out(args.proxy_hints_with_b, df_b)
+            held_out_a = _build_held_out(args.proxy_hints_with_a, df_a, args.encoding)
+            held_out_b = _build_held_out(args.proxy_hints_with_b, df_b, args.encoding)
             try:
                 result["proxy_hints_a"] = proxy_hints(df_a, profile_a["dimensions"], alpha=_alpha(args), correction=args.proxy_correction, held_out=held_out_a)
                 result["proxy_hints_b"] = proxy_hints(df_b, profile_b["dimensions"], alpha=_alpha(args), correction=args.proxy_correction, held_out=held_out_b)

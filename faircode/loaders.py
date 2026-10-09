@@ -15,8 +15,41 @@ import pandas as pd
 SNIFF_DELIMITERS = ",\t;|"
 SNIFF_SAMPLE_BYTES = 8192
 
+# Byte-order marks, longest first (the UTF-32 LE mark begins with the UTF-16 LE one).
+_BOMS = (
+    (b"\xff\xfe\x00\x00", "utf-32"),
+    (b"\x00\x00\xfe\xff", "utf-32"),
+    (b"\xef\xbb\xbf", "utf-8-sig"),
+    (b"\xff\xfe", "utf-16"),
+    (b"\xfe\xff", "utf-16"),
+)
 
-def read_table(path: str) -> pd.DataFrame:
+
+def sniff_bom_encoding(head: bytes) -> str | None:
+    """The encoding a leading BOM announces, or None when there is no BOM (#843).
+
+    The "utf-16"/"utf-32" codecs consume the BOM and pick the byte order from
+    it; "utf-8-sig" drops the UTF-8 one.
+    """
+    for bom, name in _BOMS:
+        if head.startswith(bom):
+            return name
+    return None
+
+
+def resolve_encoding(path: str, encoding: str | None = None) -> str:
+    """The encoding to read `path` with: the caller's explicit choice, else
+    whatever its BOM announces, else UTF-8."""
+    if encoding:
+        return encoding
+    try:
+        with open(path, "rb") as fh:
+            return sniff_bom_encoding(fh.read(4)) or "utf-8"
+    except OSError:
+        return "utf-8"
+
+
+def read_table(path: str, encoding: str | None = None) -> pd.DataFrame:
     suffix = Path(path).suffix.lower()
 
     if suffix == ".xlsx":
@@ -29,19 +62,23 @@ def read_table(path: str) -> pd.DataFrame:
             ) from exc
 
     if suffix == ".tsv":
-        return _read_delimited(path, default="\t")
+        return _read_delimited(path, default="\t", encoding=encoding)
 
     if suffix == ".csv":
-        return _read_delimited(path, default=",")
+        return _read_delimited(path, default=",", encoding=encoding)
 
-    return _read_delimited(path, default=",")
+    return _read_delimited(path, default=",", encoding=encoding)
 
 
-def _read_delimited(path: str, *, default: str) -> pd.DataFrame:
-    """Read delimited text, using the extension's convention only as fallback."""
-    with open(path, "r", encoding="utf-8", errors="replace", newline="") as fh:
+def _read_delimited(path: str, *, default: str, encoding: str | None = None) -> pd.DataFrame:
+    """Read delimited text, using the extension's convention only as fallback.
+
+    `encoding` overrides the default (a BOM-announced encoding, else UTF-8).
+    """
+    encoding = resolve_encoding(path, encoding)
+    with open(path, "r", encoding=encoding, errors="replace", newline="") as fh:
         sample = fh.read(SNIFF_SAMPLE_BYTES)
-    return pd.read_csv(path, sep=_sniff_delimiter(sample, default=default))
+    return pd.read_csv(path, sep=_sniff_delimiter(sample, default=default), encoding=encoding)
 
 
 def _logical_row_delimiter_counts(text: str, delimiter: str, max_rows: int = 5) -> list[int]:

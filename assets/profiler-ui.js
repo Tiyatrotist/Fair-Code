@@ -160,6 +160,14 @@
         var table = E.parseCSV(text);
       }
       runTable(table, name, file);
+      // FileReader.readAsText decodes as UTF-8; a latin-1/UTF-16 export comes
+      // through with U+FFFD replacement characters, so say so (#843).
+      if (text.indexOf('\uFFFD') !== -1) {
+        fileStatus.textContent =
+          'Some characters could not be decoded as UTF-8 and were replaced - ' +
+          'the file may use another encoding (e.g. latin-1). Re-save it as UTF-8 for exact group labels.';
+        fileStatus.hidden = false;
+      }
     } catch (err) {
       showError('Could not profile that file: ' + err.message);
     }

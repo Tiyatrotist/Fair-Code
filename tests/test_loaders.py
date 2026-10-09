@@ -259,3 +259,50 @@ def test_parquet_and_csv_profile_identically(tmp_path):
     result_parquet = profile(read_table(str(parquet_path)))
 
     assert result_csv == result_parquet
+
+
+# --- #843: non-UTF-8 input ---------------------------------------------------
+
+_LATIN = "sex,race\nM,Café\nF,Señor\nM,Café\nF,Señor\n"
+
+
+def test_read_table_encoding_argument_reads_latin1(tmp_path):
+    path = tmp_path / "latin.csv"
+    path.write_bytes(_LATIN.encode("latin-1"))
+    df = read_table(str(path), encoding="latin-1")
+    assert sorted(df["race"].unique()) == ["Café", "Señor"]
+
+
+def test_read_table_without_encoding_still_rejects_latin1(tmp_path):
+    path = tmp_path / "latin.csv"
+    path.write_bytes(_LATIN.encode("latin-1"))
+    with pytest.raises(UnicodeDecodeError):
+        read_table(str(path))
+
+
+@pytest.mark.parametrize("codec", ["utf-16", "utf-32", "utf-8-sig"])
+def test_read_table_sniffs_bom_encodings(tmp_path, codec):
+    path = tmp_path / "bom.csv"
+    path.write_bytes(_LATIN.encode(codec))
+    df = read_table(str(path))
+    assert list(df.columns) == ["sex", "race"]
+    assert sorted(df["race"].unique()) == ["Café", "Señor"]
+
+
+def test_cli_encoding_flag_and_decode_error_hint(tmp_path, capsys):
+    from faircode.cli import main
+    path = tmp_path / "latin.csv"
+    path.write_bytes(_LATIN.encode("latin-1"))
+
+    with pytest.raises(SystemExit) as exc:
+        main(["profile", str(path)])
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "--encoding" in err and "not valid utf-8" in err
+
+    assert main(["profile", str(path), "--encoding", "latin-1", "--json", "--no-provenance"]) == 0
+    assert "Café" in json.dumps(json.loads(capsys.readouterr().out), ensure_ascii=False)
+
+    with pytest.raises(SystemExit):
+        main(["profile", str(path), "--encoding", "nope-9"])
+    assert "unknown --encoding" in capsys.readouterr().err

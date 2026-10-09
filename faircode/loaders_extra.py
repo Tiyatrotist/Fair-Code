@@ -18,16 +18,20 @@ from pathlib import Path
 
 import pandas as pd
 
-from .loaders import SNIFF_SAMPLE_BYTES, _sniff_delimiter
+from .loaders import SNIFF_SAMPLE_BYTES, _sniff_delimiter, sniff_bom_encoding
 from .loaders import read_table as _read_table_frozen
 
 
-def read_table(path: str) -> pd.DataFrame:
+def read_table(path: str, encoding: str | None = None) -> pd.DataFrame:
     if path == "-":
         # No file extension to dispatch on for a stdin stream, so always
         # sniff - the same fallback loaders.read_table() uses for an
         # unrecognized/missing extension on a real file.
-        content = sys.stdin.read()
+        if hasattr(sys.stdin, "buffer"):
+            raw = sys.stdin.buffer.read()
+            content = raw.decode(encoding or sniff_bom_encoding(raw[:4]) or "utf-8")
+        else:
+            content = sys.stdin.read()
         delimiter = _sniff_delimiter(content[:SNIFF_SAMPLE_BYTES])
         return pd.read_csv(io.StringIO(content), sep=delimiter)
 
@@ -107,7 +111,7 @@ def read_table(path: str) -> pd.DataFrame:
                 "(install with: pip install faircode[parquet])"
             ) from exc
 
-    return _read_table_frozen(path)
+    return _read_table_frozen(path, encoding=encoding)
 
 
 def get_xlsx_sheet_info(path: str) -> tuple[str, list[str]] | None:
