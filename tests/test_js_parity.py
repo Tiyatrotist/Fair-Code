@@ -369,7 +369,9 @@ def test_python_js_parity_for_non_english_column_names(tmp_path):
     including the no-kind-detected --map hint."""
     names = ["sexo", "Género", "Geschlecht", "raza", "Rasse", "Raça", "edad", "Alter", "Âge",
              "Fecha de nacimiento", "Bundesland", "país", "Código postal", "estado",
-             "generosity", "alternative", "landing", "Straße", "etat_civil"]
+             "generosity", "alternative", "landing", "Straße", "etat_civil",
+             "estado_civil", "estado civil", "EstadoCivil", "marital_status",
+             "stato_civile", "état civil"]
     script = (
         "require(process.argv[1]);var E=globalThis.FairCodeProfiler;"
         "var out={};JSON.parse(process.argv[2]).forEach(function(n){"

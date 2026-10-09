@@ -46,6 +46,13 @@ Classify by the **first** keyword list that matches any token (order matters):
 | `age`       | `age`, `dob`, `yob`, `birth`; `edad`, `nacimiento`, `alter`, `geburt`, `idade`, `nascimento`, `naissance` |
 | `geography` | `region`, `state`, `zip`, `zipcode`, `postal`, `country`, `county`, `city`, `location`, `province`; `estado`, `pais`, `provincia`, `ciudad`, `bundesland`, `land`, `stadt`, `plz`, `ville`, `pays`, `departement`, `cidade`, `regiao`, `municipio` |
 
+Before the per-token keyword match, a short list of **compound phrases** that contain a geography
+stem but name a non-geography concept is checked as consecutive tokens (`estado`+`civil`,
+`marital`+`status`, `stato`+`civile`, `etat`+`civil`). A hit returns no keyword kind so the column
+falls through to generic categorical instead of `geography` - e.g. Spanish/Portuguese
+`estado_civil` / `estado civil` (marital status) must not be typed as a place (#855). Plain
+`estado` remains `geography`.
+
 Names that are not covered (other languages, abbreviations) fall through to the generic categorical
 rule below. When *no* column of a profile was recognised by name - every dimension is `categorical`
 and no `--map` was given - a final flag says so and points at `--map COL=KIND` (#847), since ages

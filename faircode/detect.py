@@ -47,6 +47,17 @@ EXACT_ONLY_KEYWORDS = frozenset({
     "stadt",
 })
 
+# Compound phrases that contain a geography stem (e.g. estado) but name a
+# non-geography concept - marital status in ES/PT/IT/FR/EN. Checked as
+# consecutive tokens before the per-token keyword loop so they fall through
+# to generic categorical instead of geography (#855). Mirror in profiler-engine.js.
+NON_GEOGRAPHY_PHRASES: tuple[tuple[str, ...], ...] = (
+    ("estado", "civil"),
+    ("marital", "status"),
+    ("stato", "civile"),
+    ("etat", "civil"),
+)
+
 # Combining diacritical marks, removed after NFD so "género" tokenizes as "genero".
 # Mirror in assets/profiler-engine.js (same Unicode range).
 _COMBINING_MARKS = re.compile("[\u0300-\u036f]")
@@ -82,9 +93,23 @@ def _token_matches(token: str, keyword: str) -> bool:
     return token.startswith(keyword)
 
 
+def _has_consecutive_phrase(tokens: list[str], phrase: tuple[str, ...]) -> bool:
+    """True when `phrase` appears as consecutive tokens in `tokens`."""
+    n = len(phrase)
+    if n == 0 or len(tokens) < n:
+        return False
+    for i in range(len(tokens) - n + 1):
+        if tuple(tokens[i : i + n]) == phrase:
+            return True
+    return False
+
+
 def classify_name(name: str) -> str | None:
     """Return the dimension kind for a column name, or None if no keyword matches."""
     tokens = _tokens(name)
+    # Marital-status compounds before per-token match (#855).
+    if any(_has_consecutive_phrase(tokens, phrase) for phrase in NON_GEOGRAPHY_PHRASES):
+        return None
     for kind, words in KEYWORDS:
         if any(_token_matches(tok, word) for tok in tokens for word in words):
             return kind
