@@ -262,8 +262,8 @@ def _compare_datasets_impl(path_a, path_b, overrides=None,
         provenance = build_provenance(
             [("dataset_hash_a", path_a), ("dataset_hash_b", path_b)],
             _resolve_opts(opts), overrides,
-            held_out=[("proxy_hints_with_a", held_out_with_a),
-                      ("proxy_hints_with_b", held_out_with_b)] if proxy_hints else ())
+            held_out=[("proxy_hints_with_a", held_out_with_a, list(df_a.columns)),
+                      ("proxy_hints_with_b", held_out_with_b, list(df_b.columns))] if proxy_hints else ())
         result = dict(result, provenance=provenance)
     return result
 

@@ -75,17 +75,19 @@ def public_params(resolved: dict) -> dict:
     return {k: v for k, v in sorted(resolved.items()) if k not in _OPAQUE_PARAMS}
 
 
-def held_out_entries(specs) -> list:
+def held_out_entries(specs, profiled_columns=None) -> list:
     """Provenance entries for repeated PATH=COLUMN held-out specs (#811).
 
     One {path, column, sha256} per spec (plus `key` when a join key was given), in the order given; an unreadable path
     (or stdin) gets a null `sha256` and a `sha256_note`, like every other digest.
+    `profiled_columns` is forwarded to split_held_out_spec so a colon in a
+    column name is resolved the same way as the live parse (#869).
     """
     from .proxy import split_held_out_spec
 
     entries = []
     for spec in specs or []:
-        path, column, key = split_held_out_spec(spec)
+        path, column, key = split_held_out_spec(spec, profiled_columns)
         entry = {"path": path, "column": column}
         if key is not None:
             entry["key"] = key
@@ -101,11 +103,14 @@ def build(digests=(), params=None, overrides=None, held_out=()) -> dict:
     given and immediately after the version fields, so the thing that
     identifies the run reads first.
 
-    `held_out` is a sequence of (field_name, specs) pairs for the files given to
+    `held_out` is a sequence of (field_name, specs) or
+    (field_name, specs, profiled_columns) triples for the files given to
     `--proxy-hints-with`: each non-empty one is recorded as a list of
     {path, column, sha256} after `overrides`, so the proxy results in the same
     export can be tied to the files that produced them. Omitted when empty, so
-    a run without held-out files keeps its existing shape.
+    a run without held-out files keeps its existing shape. The optional
+    profiled_columns list makes colon-in-column-name resolution match the
+    live parse (#869).
     """
     block = {
         "faircode_version": __version__,
@@ -115,7 +120,12 @@ def build(digests=(), params=None, overrides=None, held_out=()) -> dict:
         _add_digest(block, field, path)
     block["params"] = public_params(params or {})
     block["overrides"] = dict(overrides or {})
-    for field, specs in held_out:
+    for item in held_out:
+        if len(item) == 3:
+            field, specs, columns = item
+        else:
+            field, specs = item
+            columns = None
         if specs:
-            block[field] = held_out_entries(specs)
+            block[field] = held_out_entries(specs, columns)
     return block

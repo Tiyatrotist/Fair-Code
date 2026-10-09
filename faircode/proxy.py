@@ -71,19 +71,52 @@ def _labelize(df, name, kind, max_age=MAX_AGE):
     return df[name].astype("object")
 
 
-def split_held_out_spec(spec):
+def _rpartition_unescaped_colon(text):
+    """Split on the last colon not preceded by an odd run of backslashes.
+
+    Returns (before, after). after is None when no unescaped colon is present.
+    """
+    i = len(text) - 1
+    while i >= 0:
+        if text[i] == ":":
+            n = 0
+            j = i - 1
+            while j >= 0 and text[j] == "\\":
+                n += 1
+                j -= 1
+            if n % 2 == 0:
+                return text[:i], text[i + 1:]
+        i -= 1
+    return text, None
+
+
+def _unescape_colons(text):
+    """Turn backslash-escaped colons into literal colons (#869)."""
+    return text.replace(r"\:", ":")
+
+
+def split_held_out_spec(spec, profiled_columns=None):
     """Split "PATH=COLUMN" or "PATH=COLUMN:KEY" into (path, column, key).
 
     `key` is None for the plain form. The optional `:KEY` names a join column
-    present in both the profiled dataset and the held-out file (#822); the last
-    colon splits it off, so a column name may itself contain one only when a
-    key is also given. Missing pieces come back as empty strings for the caller
-    to reject.
+    present in both the profiled dataset and the held-out file (#822). A
+    backslash before a colon makes that colon literal (#869), so PATH=a\\:b
+    is column a:b with no key. When `profiled_columns` is given, a trailing
+    `:KEY` is only treated as a join key if KEY names a column of the profiled
+    dataset; otherwise the whole right-hand side is the column name (so
+    `PATH=a:b` works when `b` is not a profiled column). Missing pieces come
+    back as empty strings for the caller to reject.
     """
     path, _sep, rest = spec.partition("=")
-    column, sep, key = rest.rpartition(":")
-    if not sep:
-        return path, rest, None
+    before, after = _rpartition_unescaped_colon(rest)
+    if after is None:
+        return path, _unescape_colons(rest), None
+    column = _unescape_colons(before)
+    key = _unescape_colons(after)
+    if key == "":
+        return path, column, ""
+    if profiled_columns is not None and key not in profiled_columns:
+        return path, _unescape_colons(rest), None
     return path, column, key
 
 
@@ -118,7 +151,7 @@ def parse_held_out_specs(specs, df: pd.DataFrame, read_table, *, flag="--proxy-h
     """
     held_out = {}
     for spec in specs or []:
-        path, column, key = split_held_out_spec(spec)
+        path, column, key = split_held_out_spec(spec, df.columns)
         if not path or not column or key == "" or "=" not in spec:
             raise ValueError(f"invalid {flag} '{spec}', expected PATH=COLUMN or PATH=COLUMN:KEY")
         held_df = read_table(path)
