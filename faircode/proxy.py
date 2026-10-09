@@ -71,8 +71,36 @@ def _labelize(df, name, kind):
     return df[name].astype("object")
 
 
+def split_held_out_spec(spec):
+    """Split "PATH=COLUMN" or "PATH=COLUMN:KEY" into (path, column, key).
+
+    `key` is None for the plain form. The optional `:KEY` names a join column
+    present in both the profiled dataset and the held-out file (#822); the last
+    colon splits it off, so a column name may itself contain one only when a
+    key is also given. Missing pieces come back as empty strings for the caller
+    to reject.
+    """
+    path, _sep, rest = spec.partition("=")
+    column, sep, key = rest.rpartition(":")
+    if not sep:
+        return path, rest, None
+    return path, column, key
+
+
+def _key_labels(series, what, flag):
+    """Join-key values as strings, rejecting nulls and duplicates (#822)."""
+    if series.isna().any():
+        raise ValueError(f"{flag} join key {what} has empty values - keys must all be present")
+    labels = series.astype(str)
+    if labels.duplicated().any():
+        dup = labels[labels.duplicated()].iloc[0]
+        raise ValueError(f"{flag} join key {what} has duplicate values (e.g. '{dup}') - "
+                         f"keys must be unique")
+    return labels
+
+
 def parse_held_out_specs(specs, df: pd.DataFrame, read_table, *, flag="--proxy-hints-with"):
-    """Parse repeated PATH=COLUMN specs into a {column: pandas.Series} map
+    """Parse repeated PATH=COLUMN[:KEY] specs into a {column: pandas.Series} map
     aligned to `df`'s index, for proxy_hints()'s `held_out` param. Shared by
     the CLI's `--proxy-hints-with` and the MCP `proxy_hints` tool's
     `held_out_with`, so both get the same parse/column/row-count validation
@@ -81,12 +109,18 @@ def parse_held_out_specs(specs, df: pd.DataFrame, read_table, *, flag="--proxy-h
     (missing file, unreadable format) surfaces however the caller's `read_table`
     reports it - this function never prints or exits, only raises. `flag`
     names the caller's own flag/parameter in error messages.
+
+    Without `:KEY` the file must align with `df` 1:1 by row position. With it,
+    rows are matched on that column instead (#822): the key must exist in both
+    files, be unique and non-empty in both, and every key in `df` must be in the
+    held-out file (extra held-out rows are ignored), so a re-sorted or filtered
+    export still lines up.
     """
     held_out = {}
     for spec in specs or []:
-        path, sep, column = spec.partition("=")
-        if not sep or not path or not column:
-            raise ValueError(f"invalid {flag} '{spec}', expected PATH=COLUMN")
+        path, column, key = split_held_out_spec(spec)
+        if not path or not column or key == "" or "=" not in spec:
+            raise ValueError(f"invalid {flag} '{spec}', expected PATH=COLUMN or PATH=COLUMN:KEY")
         held_df = read_table(path)
         if column not in held_df.columns:
             raise ValueError(f"{flag} column '{column}' not found in {path}")
@@ -98,10 +132,26 @@ def parse_held_out_specs(specs, df: pd.DataFrame, read_table, *, flag="--proxy-h
             raise ValueError(
                 f"{flag} column '{column}' was already supplied by an earlier "
                 f"{flag} spec - held-out columns must not collide with each other")
+        if key is not None:
+            if key not in df.columns:
+                raise ValueError(f"{flag} join key '{key}' not found in the profiled dataset")
+            if key not in held_df.columns:
+                raise ValueError(f"{flag} join key '{key}' not found in {path}")
+            df_keys = _key_labels(df[key], f"'{key}' in the profiled dataset", flag)
+            held_keys = _key_labels(held_df[key], f"'{key}' in {path}", flag)
+            lookup = pd.Series(held_df[column].to_numpy(), index=held_keys.to_numpy())
+            missing = ~df_keys.isin(lookup.index)
+            if missing.any():
+                raise ValueError(
+                    f"{flag} {path} has no row for {int(missing.sum())} key(s) of the "
+                    f"profiled dataset (e.g. '{df_keys[missing].iloc[0]}')")
+            held_out[column] = pd.Series(lookup.loc[df_keys.to_numpy()].to_numpy(), index=df.index)
+            continue
         if len(held_df) != len(df):
             raise ValueError(
                 f"{flag} {path} has {len(held_df)} row(s), but the profiled "
-                f"dataset has {len(df)} - rows must align 1:1")
+                f"dataset has {len(df)} - rows must align 1:1 (or add a join key: "
+                f"PATH=COLUMN:KEY)")
         held_out[column] = pd.Series(held_df[column].to_numpy(), index=df.index)
     return held_out
 

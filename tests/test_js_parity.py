@@ -1293,6 +1293,45 @@ def test_build_held_out_reports_ignored_xlsx_sheets(tmp_path):
     assert out["plain"] == {"race": ["A", "A", "B", "B"]}
 
 
+def test_build_held_out_joins_on_a_key_like_python(tmp_path):
+    """#822: a PATH=COLUMN:KEY held-out file is matched on the key, not row order, and
+    both engines reject the same bad inputs."""
+    pytest.importorskip("pandas")
+    from faircode.proxy import parse_held_out_specs
+
+    main_csv = tmp_path / "main.csv"
+    main_csv.write_text("id,zip\n1,111\n2,111\n3,222\n4,222\n", encoding="utf-8")
+    held_csv = tmp_path / "held.csv"
+    held_csv.write_text("id,race\n4,B\n2,A\n3,B\n1,A\n9,Z\n", encoding="utf-8")
+    df = pd.read_csv(main_csv)
+    py = parse_held_out_specs([f"{held_csv}=race:id"], df, pd.read_csv)
+    assert list(py["race"]) == ["A", "A", "B", "B"]
+
+    script = (
+        "require(process.argv[1]);var fs=require('fs');var E=globalThis.FairCodeProfiler;"
+        "var t=E.parseCSV(fs.readFileSync(process.argv[2],'utf-8'));var out={};"
+        "var held=fs.readFileSync(process.argv[3],'utf-8');"
+        "(async function(){"
+        "out.ok=await E.buildHeldOut([{name:'h.csv',column:'race',key:'id',data:held}],t);"
+        "async function err(name,spec,data){try{await E.buildHeldOut([spec],t)}catch(e){out[name]=e.message}}"
+        "await err('missing_key',{name:'h.csv',column:'race',key:'nope',data:held});"
+        "await err('dup',{name:'h.csv',column:'race',key:'id',data:'id,race\\n1,A\\n1,B\\n2,A\\n3,A\\n4,A\\n'});"
+        "await err('unmatched',{name:'h.csv',column:'race',key:'id',data:'id,race\\n1,A\\n2,A\\n'});"
+        "await err('positional',{name:'h.csv',column:'race',data:held});"
+        "process.stdout.write(JSON.stringify(out));})();"
+    )
+    done = subprocess.run(
+        ["node", "-e", script, str(REPO_ROOT / "assets" / "profiler-engine.js"),
+         str(main_csv), str(held_csv)],
+        capture_output=True, text=True, encoding="utf-8", check=True)
+    out = json.loads(done.stdout)
+    assert out["ok"] == {"race": ["A", "A", "B", "B"]}
+    assert "not found in the profiled dataset" in out["missing_key"]
+    assert "duplicate" in out["dup"]
+    assert "no row for 2 key(s)" in out["unmatched"]
+    assert "rows must align 1:1" in out["positional"]
+
+
 def test_held_out_control_adds_rows_collects_specs_and_validates():
     """Drives the real assets/profiler-heldout.js through a minimal DOM stub:
     rows can be added/removed, filled rows become specs ({name, column, data},
@@ -1324,7 +1363,7 @@ def test_held_out_control_adds_rows_collects_specs_and_validates():
       inputs(1)[1].value='orphan';
       try{await ctl.collect();}catch(e){out.half=e.message;}
       inputs(1)[1].value='';
-      container.children[2].children[2].click();       // remove row 3
+      container.children[2].children[3].click();       // remove row 3
       out.rows_after_remove=container.children.length;
       ctl.reset();
       out.rows_after_reset=container.children.length;

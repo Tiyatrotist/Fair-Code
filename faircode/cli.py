@@ -242,10 +242,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--proxy-correction", choices=("bonferroni", "holm"), default=None,
                    help="multiple-comparison correction across all tested pairs for "
                         "--proxy-hints (default: none; adds p_adjusted to each hint)")
-    p.add_argument("--proxy-hints-with", action="append", metavar="PATH=COLUMN",
+    p.add_argument("--proxy-hints-with", action="append", metavar="PATH=COLUMN[:KEY]",
                    help="also test proxy_hints against a column already dropped from "
                         "the dataset; PATH's rows must align 1:1 with the profiled "
-                        "dataset (repeatable, needs --proxy-hints)")
+                        "dataset, or be joined on a key column present in both files "
+                        "with :KEY (repeatable, needs --proxy-hints)")
     p.add_argument("--min-share", type=float, metavar="F",
                    help="under-representation threshold (default 0.05)")
     p.add_argument("--intersection-floor", type=float, metavar="F",
@@ -293,13 +294,13 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--proxy-correction", choices=("bonferroni", "holm"), default=None,
                    help="multiple-comparison correction across all tested pairs for "
                         "--proxy-hints (default: none; adds p_adjusted to each hint)")
-    c.add_argument("--proxy-hints-with-a", action="append", metavar="PATH=COLUMN",
+    c.add_argument("--proxy-hints-with-a", action="append", metavar="PATH=COLUMN[:KEY]",
                    help="also test dataset A's proxy_hints against a column already "
-                        "dropped from A; PATH's rows must align 1:1 with csv_a "
-                        "(repeatable, needs --proxy-hints)")
-    c.add_argument("--proxy-hints-with-b", action="append", metavar="PATH=COLUMN",
+                        "dropped from A; PATH's rows must align 1:1 with csv_a, or be "
+                        "joined on a key column with :KEY (repeatable, needs --proxy-hints)")
+    c.add_argument("--proxy-hints-with-b", action="append", metavar="PATH=COLUMN[:KEY]",
                    help="same as --proxy-hints-with-a, for dataset B (rows must align "
-                        "1:1 with csv_b)")
+                        "1:1 with csv_b, or be joined with :KEY)")
     c.add_argument("--map", action="append", metavar="COL=KIND",
                    help="force a column's dimension when auto-detection misses it "
                         "(applied to both datasets); KIND is one of " +

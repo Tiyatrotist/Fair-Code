@@ -550,7 +550,8 @@ def build_server():
         nothing here can flag a remaining column as a proxy for it unless
         `held_out_with` is given. `held_out_with` is a list of "PATH=COLUMN"
         strings (mirroring the CLI's --proxy-hints-with flag), each pointing
-        at a file whose rows align 1:1 with `path` and a column to pull the
+        at a file whose rows align 1:1 with `path` (or, with "PATH=COLUMN:KEY", are
+        joined to it on a key column present in both files) and a column to pull the
         dropped attribute's original values from. See faircode/SPEC.md
         section 3 and issue #328.
         """

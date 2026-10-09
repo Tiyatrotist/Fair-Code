@@ -78,13 +78,17 @@ def public_params(resolved: dict) -> dict:
 def held_out_entries(specs) -> list:
     """Provenance entries for repeated PATH=COLUMN held-out specs (#811).
 
-    One {path, column, sha256} per spec, in the order given; an unreadable path
+    One {path, column, sha256} per spec (plus `key` when a join key was given), in the order given; an unreadable path
     (or stdin) gets a null `sha256` and a `sha256_note`, like every other digest.
     """
+    from .proxy import split_held_out_spec
+
     entries = []
     for spec in specs or []:
-        path, _sep, column = spec.partition("=")
+        path, column, key = split_held_out_spec(spec)
         entry = {"path": path, "column": column}
+        if key is not None:
+            entry["key"] = key
         _add_digest(entry, "sha256", path)
         entries.append(entry)
     return entries

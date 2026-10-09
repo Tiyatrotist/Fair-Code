@@ -214,3 +214,75 @@ def test_terminal_report_shows_family_size_next_to_adjusted_p():
     result["proxy_hints"] = [{"a": "sex", "b": "race", "p_value": 0.01, "cramers_v": 0.4,
                               "chi2": 5.0, "p_adjusted": 0.03, "n_tests": 3}]
     assert "adj p=0.03 (m=3 pairs)" in to_terminal(result)
+
+
+# --- #822: join key for held-out files ---------------------------------------
+
+def _joined_frames():
+    df = pd.DataFrame({"id": [1, 2, 3, 4], "zip": ["111", "111", "222", "222"]})
+    held = pd.DataFrame({"id": [4, 2, 3, 1, 9], "race": ["B", "A", "B", "A", "Z"]})
+    return df, held
+
+
+def test_held_out_key_matches_rows_by_key_not_position():
+    from faircode.proxy import parse_held_out_specs
+    df, held = _joined_frames()
+    out = parse_held_out_specs(["h.csv=race:id"], df, lambda _p: held)
+    assert list(out["race"]) == ["A", "A", "B", "B"]  # re-sorted file, extra key 9 ignored
+    assert list(out["race"].index) == list(df.index)
+
+
+def test_held_out_without_key_still_requires_equal_row_counts():
+    from faircode.proxy import parse_held_out_specs
+    df, held = _joined_frames()
+    with pytest.raises(ValueError, match="rows must align 1:1"):
+        parse_held_out_specs(["h.csv=race"], df, lambda _p: held)
+
+
+@pytest.mark.parametrize("held_override, df_override, message", [
+    ({"id": [1, 1, 2, 3, 4], "race": list("ABABA")}, None, "duplicate"),
+    ({"id": [1, 2], "race": list("AB")}, None, "no row for 2 key"),
+    ({"id": [1, None, 3, 4], "race": list("ABAB")}, None, "empty values"),
+    (None, {"id": [1, 2, 2, 4], "zip": list("aabb")}, "duplicate"),
+])
+def test_held_out_key_rejects_bad_keys(held_override, df_override, message):
+    from faircode.proxy import parse_held_out_specs
+    df, held = _joined_frames()
+    if held_override:
+        held = pd.DataFrame(held_override)
+    if df_override:
+        df = pd.DataFrame(df_override)
+    with pytest.raises(ValueError, match=message):
+        parse_held_out_specs(["h.csv=race:id"], df, lambda _p: held)
+
+
+def test_held_out_key_must_exist_in_both_files_and_differ_from_the_column():
+    from faircode.proxy import parse_held_out_specs
+    df, held = _joined_frames()
+    with pytest.raises(ValueError, match="not found in the profiled dataset"):
+        parse_held_out_specs(["h.csv=race:nope"], df, lambda _p: held)
+    with pytest.raises(ValueError, match="not found in h.csv"):
+        parse_held_out_specs(["h.csv=race:zip"], df, lambda _p: held)
+    with pytest.raises(ValueError, match="invalid"):
+        parse_held_out_specs(["h.csv=race:"], df, lambda _p: held)
+
+
+def test_held_out_key_feeds_proxy_hints(tmp_path):
+    from faircode.cli import main
+    import json as _json
+    df = pd.DataFrame({"id": range(200), "zip_code": ["111"] * 100 + ["222"] * 100})
+    held = pd.DataFrame({"id": range(200), "race": ["A"] * 100 + ["B"] * 100}).sample(
+        frac=1, random_state=3)  # shuffled: position alignment would be wrong
+    df.to_csv(tmp_path / "d.csv", index=False)
+    held.to_csv(tmp_path / "h.csv", index=False)
+    import io
+    from contextlib import redirect_stdout
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        code = main(["profile", str(tmp_path / "d.csv"), "--proxy-hints", "--json",
+                     "--proxy-hints-with", f"{tmp_path / 'h.csv'}=race:id"])
+    assert code == 0
+    result = _json.loads(buf.getvalue())
+    assert any({h["a"], h["b"]} == {"zip_code", "race"} for h in result["proxy_hints"])
+    entry = result["provenance"]["proxy_hints_with"][0]
+    assert entry["column"] == "race" and entry["key"] == "id"

@@ -158,8 +158,14 @@ column was never checked."
 `faircode profile --proxy-hints --proxy-hints-with PATH=COLUMN` (repeatable) closes this specific
 gap: `COLUMN` from `PATH` is treated as an additional column, tested against every detected dimension
 and against every other held-out column, without needing it back in the profiled dataset itself.
-`PATH`'s rows must align 1:1 (same order) with the profiled dataset - there is no join key, so a
-mismatched row count is a hard error rather than a silently wrong result. Programmatically,
+By default `PATH`'s rows must align 1:1 (same order) with the profiled dataset, so a mismatched row
+count is a hard error rather than a silently wrong result - but a same-length file in a different
+order would still be accepted, so a spec may instead be `PATH=COLUMN:KEY` (#822): rows are then
+matched on the `KEY` column, which must exist in both files and be unique and non-empty in both,
+and every key in the profiled dataset must appear in the held-out file (extra held-out rows are
+ignored). Keys are compared as text. The same form works for `--proxy-hints-with-a/-b`, the MCP
+`held_out_with*` parameters, and a "Join key (optional)" input per row in the web views; the
+recorded provenance entry (section 10) gains a `key` field. Programmatically,
 `proxy_hints(df, dimensions, held_out={"race": pd.Series(...)})` does the same thing directly.
 `compare`'s `--proxy-hints` accepts the same idea per side - `--proxy-hints-with-a PATH=COLUMN`
 and `--proxy-hints-with-b PATH=COLUMN` (each repeatable), aligned to `csv_a`/`csv_b` respectively -
@@ -435,7 +441,7 @@ edit.
 - **`reference_hash`** - present only when a section 9 baseline was supplied.
 - **`proxy_hints_with`** (`proxy_hints_with_a` / `_b` for `compare`) - present only when held-out
   files were given to `--proxy-hints-with` (section 3; the web proxy results; MCP
-  `compare_datasets`'s `held_out_with_a`/`_b`): a list of `{ "path", "column", "sha256" }`, one per
+  `compare_datasets`'s `held_out_with_a`/`_b`): a list of `{ "path", "column", "sha256" }` (plus `"key"` when a join key was given), one per
   file in the order given, with `sha256` hashed like `dataset_hash` and a `sha256_note` when it is
   `null`. It ties the proxy results in the same export to the files that produced them (#811).
 - **`<field>_note`** - present only when the matching digest is `null`, saying why the bytes were

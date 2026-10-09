@@ -863,8 +863,10 @@
   // Held-out columns (#781): {name: valuesArray} for a protected attribute
   // already dropped from `table` - the browser counterpart of the CLI's
   // --proxy-hints-with PATH=COLUMN, treated as plain categorical values.
-  // parseHeldOut() applies the same checks as proxy.py's parse_held_out_specs.
-  function parseHeldOut(heldTable, column, table, already) {
+  // parseHeldOut() applies the same checks as proxy.py's parse_held_out_specs,
+  // including the optional join `key` (#822): rows are matched on that column
+  // instead of by position.
+  function parseHeldOut(heldTable, column, table, already, key) {
     if (!column) throw new Error('held-out column name is required');
     if (heldTable.columns.indexOf(column) === -1) {
       throw new Error("held-out column '" + column + "' not found in the held-out file");
@@ -876,9 +878,38 @@
     if (already && Object.prototype.hasOwnProperty.call(already, column)) {
       throw new Error("held-out column '" + column + "' was already supplied");
     }
+    if (key) {
+      if (table.columns.indexOf(key) === -1) {
+        throw new Error("join key '" + key + "' not found in the profiled dataset");
+      }
+      if (heldTable.columns.indexOf(key) === -1) throw new Error("join key '" + key + "' not found in the held-out file");
+      var keyLabels = function (rows, what) {
+        var seen = Object.create(null), labels = rows.map(function (r) {
+          var v = r[key];
+          if (v === null || v === undefined) {
+            throw new Error('join key ' + what + ' has empty values - keys must all be present');
+          }
+          v = String(v);
+          if (seen[v]) throw new Error('join key ' + what + " has duplicate values (e.g. '" + v + "') - keys must be unique");
+          seen[v] = 1;
+          return v;
+        });
+        return labels;
+      };
+      var dfKeys = keyLabels(table.rows, "'" + key + "' in the profiled dataset");
+      var heldKeys = keyLabels(heldTable.rows, "'" + key + "' in the held-out file");
+      var lookup = Object.create(null);
+      heldKeys.forEach(function (k, i) { lookup[k] = heldTable.rows[i][column]; });
+      var missing = dfKeys.filter(function (k) { return !(k in lookup); });
+      if (missing.length) {
+        throw new Error('held-out file has no row for ' + missing.length + " key(s) of the profiled dataset (e.g. '" +
+          missing[0] + "')");
+      }
+      return dfKeys.map(function (k) { return lookup[k]; });
+    }
     if (heldTable.rows.length !== table.rows.length) {
       throw new Error('held-out file has ' + heldTable.rows.length + ' row(s), but the profiled ' +
-        'dataset has ' + table.rows.length + ' - rows must align 1:1');
+        'dataset has ' + table.rows.length + ' - rows must align 1:1 (or add a join key)');
     }
     return heldTable.rows.map(function (r) { return r[column]; });
   }
@@ -902,7 +933,7 @@
   }
 
   // Build a held-out map from several uploaded files (#801, #802, #803).
-  // specs = [{name, column, data}] where `data` is text (csv/tsv/json) or an
+  // specs = [{name, column, key?, data}] where `data` is text (csv/tsv/json) or an
   // ArrayBuffer (.xlsx, first sheet - the same reader the main dropzone uses).
   // Every spec goes through parseHeldOut, with the running map as `already`,
   // so two specs naming the same column are rejected like the CLI's repeated
@@ -929,7 +960,7 @@
       else if (/\.json$/i.test(spec.name)) heldTable = parseJSON(spec.data);
       else heldTable = parseCSV(spec.data);
       try {
-        out[spec.column] = parseHeldOut(heldTable, spec.column, table, out);
+        out[spec.column] = parseHeldOut(heldTable, spec.column, table, out, spec.key);
       } catch (err) {
         if (sheetNote && heldTable.columns.indexOf(spec.column) === -1) {
           err.message += ' (' + sheetNote + ')';
