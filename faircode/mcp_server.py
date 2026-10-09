@@ -141,7 +141,7 @@ def _check_overrides(overrides, known_columns):
 def _build_opts(min_share=None, intersection_floor=None, imbalance_flag=None,
                 missing_flag=None, min_group_size=None, cross=None,
                 reference_path=None, max_categorical_card=None,
-                max_dimension_groups=None, encoding=None):
+                max_dimension_groups=None, encoding=None, max_age=None):
     opts = {
         "min_share": min_share,
         "intersection_floor": intersection_floor,
@@ -150,6 +150,7 @@ def _build_opts(min_share=None, intersection_floor=None, imbalance_flag=None,
         "min_group_size": min_group_size,
         "max_categorical_card": max_categorical_card,
         "max_dimension_groups": max_dimension_groups,
+        "max_age": max_age,
     }
     if cross:
         if len(cross) != 2 or not all(cross):
@@ -183,13 +184,13 @@ def _profile_dataset_impl(path, overrides=None, cross=None, reference_path=None,
                           imbalance_flag=None, missing_flag=None,
                           min_group_size=None, include_provenance=True,
                           max_categorical_card=None, max_dimension_groups=None,
-                          encoding=None):
+                          encoding=None, max_age=None):
     overrides = overrides or {}
     df = _read_table_or_raise(path, encoding)
     _check_overrides(overrides, df.columns)
     opts = _build_opts(min_share, intersection_floor, imbalance_flag,
                        missing_flag, min_group_size, cross, reference_path,
-                       max_categorical_card, max_dimension_groups, encoding)
+                       max_categorical_card, max_dimension_groups, encoding, max_age)
     result = profile(df, overrides, opts)
     note = _sheet_note(path)
     if note:
@@ -209,7 +210,7 @@ def _compare_datasets_impl(path_a, path_b, overrides=None,
                            proxy_hints=False, max_categorical_card=None,
                            max_dimension_groups=None, held_out_with_a=None,
                            held_out_with_b=None, alpha=None, correction=None,
-                           encoding=None):
+                           encoding=None, max_age=None):
     overrides = overrides or {}
     df_a = _read_table_or_raise(path_a, encoding)
     df_b = _read_table_or_raise(path_b, encoding)
@@ -220,7 +221,7 @@ def _compare_datasets_impl(path_a, path_b, overrides=None,
     opts = _build_opts(min_share, intersection_floor, imbalance_flag,
                        missing_flag, min_group_size,
                        max_categorical_card=max_categorical_card,
-                       max_dimension_groups=max_dimension_groups)
+                       max_dimension_groups=max_dimension_groups, max_age=max_age)
     profile_a = profile(df_a, overrides, opts)
     profile_b = profile(df_b, overrides, opts)
     result = compare(profile_a, profile_b, name_a=path_a, name_b=path_b)
@@ -232,6 +233,7 @@ def _compare_datasets_impl(path_a, path_b, overrides=None,
     if proxy_hints:
         kw = {} if alpha is None else {"alpha": alpha}
         kw["correction"] = correction
+        kw["max_age"] = _resolve_opts(opts)["max_age"]
         held_a = parse_held_out_specs(held_out_with_a, df_a, read_held,
                                       flag="held_out_with_a") if held_out_with_a else None
         held_b = parse_held_out_specs(held_out_with_b, df_b, read_held,
@@ -429,6 +431,7 @@ def build_server():
                         max_categorical_card: int | None = None,
                         max_dimension_groups: int | None = None,
                         encoding: str | None = None,
+                        max_age: float | None = None,
                         format: str = "json") -> dict:
         """Profile a tabular dataset (.csv/.tsv/.xlsx/.json/.parquet) for
         demographic representation: per-dimension imbalance/missing/skew,
@@ -447,6 +450,10 @@ def build_server():
         missing_flag=0.05, min_group_size=100, max_categorical_card=20,
         max_dimension_groups=50) when set, matching the CLI's
         --max-categorical-card/--max-dimension-groups.
+
+        `max_age` (default 120) sets the age above which a numeric age is treated
+        as implausible - flagged and left out of the age bands rather than counted
+        in the oldest band (CLI `--max-age`); on `compare_datasets` too.
 
         `encoding` names the text encoding of delimited files (e.g. "latin-1",
         "cp1252", "utf-16"); default is a UTF-8/16/32 byte-order mark if present,
@@ -467,7 +474,7 @@ def build_server():
                 path, overrides, cross, reference_path, min_share,
                 intersection_floor, imbalance_flag, missing_flag,
                 min_group_size, include_provenance, max_categorical_card,
-                max_dimension_groups, encoding), format, to_csv)
+                max_dimension_groups, encoding, max_age), format, to_csv)
         except (ValueError, FileNotFoundError, RuntimeError) as exc:
             raise _as_tool_error(exc) from exc
 
@@ -488,6 +495,7 @@ def build_server():
                          alpha: float | None = None,
                          correction: str | None = None,
                          encoding: str | None = None,
+                         max_age: float | None = None,
                          format: str = "json") -> dict:
         """Compare two tabular datasets (e.g. a training set and a production
         snapshot) for representation drift: which dimensions/groups appeared,
@@ -519,7 +527,7 @@ def build_server():
                 path_a, path_b, overrides, min_share, intersection_floor,
                 imbalance_flag, missing_flag, min_group_size, include_provenance,
                 proxy_hints, max_categorical_card, max_dimension_groups,
-                held_out_with_a, held_out_with_b, alpha, correction, encoding),
+                held_out_with_a, held_out_with_b, alpha, correction, encoding, max_age),
                 format, compare_to_csv)
         except (ValueError, FileNotFoundError, RuntimeError) as exc:
             raise _as_tool_error(exc) from exc

@@ -17,7 +17,7 @@ import math
 
 import pandas as pd
 
-from .profiler import _age_band, _age_to_numeric, _is_categorical_age_sentinel, _looks_like_dates
+from .profiler import MAX_AGE, _age_band, _age_numbers, _is_categorical_age_sentinel, _looks_like_dates
 
 PROXY_ALPHA = 0.05
 
@@ -51,11 +51,11 @@ def adjust_p_values(p_values, method):
     raise ValueError(f"correction must be one of {PROXY_CORRECTIONS}, got {method!r}")
 
 
-def _labelize(df, name, kind):
+def _labelize(df, name, kind, max_age=MAX_AGE):
     """Same value normalization the intersection crosstab uses (age → bands)."""
     if kind == "age" and not _looks_like_dates(df[name]):
-        nums = [_age_to_numeric(v) for v in df[name]]
-        if any(n is not None for n in nums):
+        nums, implausible = _age_numbers(df[name], max_age)
+        if implausible or any(n is not None for n in nums):
             # Non-numeric age sentinels ("unknown", "prefer not to say") get
             # their own categorical label here too, matching _dimension()'s
             # main breakdown and _intersections()'s labelize() - otherwise a
@@ -157,7 +157,8 @@ def parse_held_out_specs(specs, df: pd.DataFrame, read_table, *, flag="--proxy-h
 
 
 def proxy_hints(df: pd.DataFrame, dimensions: list, alpha=PROXY_ALPHA,
-                held_out: dict | None = None, correction: str | None = None) -> list:
+                held_out: dict | None = None, correction: str | None = None,
+                max_age=MAX_AGE) -> list:
     """Chi-squared test of independence over every pair of detected dimensions.
 
     Returns pairs with p < alpha, most-significant first, each with its p-value
@@ -199,7 +200,7 @@ def proxy_hints(df: pd.DataFrame, dimensions: list, alpha=PROXY_ALPHA,
             "proxy hints need scipy (install with: pip install faircode[proxy])"
         ) from exc
 
-    labelized = {d["name"]: _labelize(df, d["name"], d["kind"]) for d in dimensions}
+    labelized = {d["name"]: _labelize(df, d["name"], d["kind"], max_age) for d in dimensions}
     for name, series in (held_out or {}).items():
         labelized[name] = series.astype("object")
 

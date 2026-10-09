@@ -71,7 +71,12 @@ Age columns come in three shapes - normalize to numeric bands:
 
 (Digits mean ASCII `0-9` only in both engines. Python's `\d` and the browser's `\d` disagree about Arabic-Indic or fullwidth digits, so a value written with them is *not* a number: it falls into the categorical branch below, identically in Python and JS - #836.)
 
-- **Non-negative numeric** (e.g. `34`): use directly.
+- **Non-negative numeric** (e.g. `34`): use directly, up to `MAX_AGE` (default 120, `--max-age`).
+  A value *above* it (`150`, `200`, a birth year such as `1985`) is **implausible**: it is not
+  banded, is counted as missing like a negative value, and is reported as `implausible_values` on the
+  dimension plus a flag - it must never inflate the `75+` band (#840). It is also left out of the
+  skewness, the intersections and the proxy tests. If every value is implausible the dimension has
+  no groups ("not measured").
 - **Interval string** (e.g. `[70-80)`): take the lower bound via the first signed number.
 - **Negative numeric or signed-string sentinel** (e.g. `-1`, `"unknown: -999"`): treat as missing; it must never fall through to the `75+` band.
 - **Anything else**: treat as categorical (skip numeric handling).
@@ -251,7 +256,9 @@ dict, JS uses a plain object):
 ```
 
 `flags` is a human-readable list assembled from: every `under_represented` group, every dimension
-with `imbalance_ratio ≥ 3`, every dimension with `missing_pct ≥ 0.05`, and every intersectional gap.
+with `imbalance_ratio ≥ 3`, every dimension with `missing_pct ≥ 0.05`, every age dimension with
+`implausible_values` (an optional integer key present only when above zero, #840), and every
+intersectional gap.
 
 ---
 
@@ -264,7 +271,7 @@ how many groups were omitted; the structured result remains complete.
 The flagging thresholds are overridable per run without editing source: `profile(df, opts={...})`
 in Python, `profile(table, overrides, opts)` in JS, and `--min-share` / `--intersection-floor` /
 `--imbalance-flag` / `--missing-flag` / `--min-group-size` / `--max-categorical-card` /
-`--max-dimension-groups` on the CLI. Omitted knobs fall back to the defaults below.
+`--max-dimension-groups` / `--max-age` on the CLI. Omitted knobs fall back to the defaults below.
 
 | Constant               | Default | Used by                          |
 |------------------------|:-------:|----------------------------------|
@@ -276,6 +283,7 @@ in Python, `profile(table, overrides, opts)` in JS, and `--min-share` / `--inter
 | `IMBALANCE_FLAG`       | 3.0     | imbalance-ratio flag             |
 | `MISSING_FLAG`         | 0.05    | missing-data flag                |
 | `AGE_BANDS`            | 0,18,30,45,60,75 | age band edges          |
+| `MAX_AGE`              | 120     | numeric ages above this are implausible, not banded (§2) |
 | `DATE_SAMPLE_SIZE`     | 200          | whole-column date-detection sample cap |
 | `PSI_EPSILON`          | 0.0001  | share floor in PSI (§8)          |
 | `PSI_MODERATE`         | 0.10    | PSI ≥ this → moderate drift (§8) |

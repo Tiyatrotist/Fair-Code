@@ -453,7 +453,7 @@
       return;
     }
     var hints = E.proxyHints(currentTable, currentResult.dimensions, alpha, heldOut,
-      document.getElementById('proxyCorrectionInput').value || null);
+      document.getElementById('proxyCorrectionInput').value || null, currentOpts.max_age);
     // Attach to the result so Download report / Copy as JSON / Download CSV
     // include what's on screen (issue #758).
     currentResult.proxy_hints = hints;

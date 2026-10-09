@@ -24,6 +24,7 @@ AGE_BANDS = [0, 18, 30, 45, 60, 75]  # left-closed edges; final band is "75+"
 DATE_SAMPLE_SIZE = 200  # deterministic whole-column sample for date detection
 MAX_DIMENSION_GROUPS = 50  # drop identifier/date-like columns (geography exempt)
 MIN_GROUP_SIZE = 100  # warn when a subgroup has fewer than N rows (default: 100)
+MAX_AGE = 120  # numeric ages above this are reported as implausible, not banded (SPEC 2)
 
 # ASCII digits only, like the JS engine (#836): Python's `\d` also matches
 # Arabic-Indic/fullwidth digits, which the browser regex does not.
@@ -64,6 +65,7 @@ _DEFAULT_OPTS = {
     "min_group_size": MIN_GROUP_SIZE,  # warn when a subgroup has fewer than N rows
     "max_categorical_card": MAX_CATEGORICAL_CARD,
     "max_dimension_groups": MAX_DIMENSION_GROUPS,
+    "max_age": MAX_AGE,  # ages above this are not banded; flagged instead (SPEC 2)
     "cross": None,       # [colA, colB] to force the intersection pair (SPEC 4)
     "reference": None,   # {column: {group: expected_share}} baseline (SPEC 8)
 }
@@ -93,6 +95,9 @@ def _validate_opts(o: dict) -> None:
     max_dimension_groups = o.get("max_dimension_groups")
     if max_dimension_groups is not None and max_dimension_groups < 1:
         raise ValueError(f"max_dimension_groups must be >= 1, got {max_dimension_groups!r}")
+    max_age = o.get("max_age")
+    if max_age is not None and not max_age > 0:
+        raise ValueError(f"max_age must be > 0, got {max_age!r}")
 
 
 def _resolve_opts(opts) -> dict:
@@ -146,6 +151,21 @@ def _age_to_numeric(value):
             return None
         numeric = float(match.group())
     return numeric if math.isfinite(numeric) and numeric >= AGE_BANDS[0] else None
+
+
+def _age_numbers(values, max_age=MAX_AGE):
+    """Per-cell numeric ages with implausible ones removed, plus how many there were.
+
+    An age above `max_age` (150, 200, a mistyped birth year) is a data-quality
+    problem, not a member of the "75+" band: it comes back as None, like a
+    negative one, and is counted in the second return value so the profile can
+    flag it (#840).
+    """
+    nums = [_age_to_numeric(v) for v in values]
+    implausible = sum(1 for n in nums if n is not None and n > max_age)
+    if implausible:
+        nums = [None if n is not None and n > max_age else n for n in nums]
+    return nums, implausible
 
 
 def _is_categorical_age_sentinel(value) -> bool:
@@ -244,17 +264,18 @@ def _analyze_groups(labels_counts: dict, n_total: int, null_count: int,
 
 
 def _dimension(df: pd.DataFrame, name: str, kind: str,
-               min_share=MIN_SHARE_THRESHOLD, min_group_size=MIN_GROUP_SIZE) -> dict:
+               min_share=MIN_SHARE_THRESHOLD, min_group_size=MIN_GROUP_SIZE,
+               max_age=MAX_AGE) -> dict:
     col = df[name]
     n_total = len(df)
     skewness = None
 
     if kind == "age" and not _looks_like_dates(col):
-        nums = [_age_to_numeric(v) for v in col]
+        nums, implausible = _age_numbers(col, max_age)
         numeric_vals = [n for n in nums if n is not None]
         # Numeric age → bands; if nothing parsed numerically, fall back to raw.
-        if numeric_vals:
-            skewness = _skewness(numeric_vals)
+        if numeric_vals or implausible:
+            skewness = _skewness(numeric_vals) if numeric_vals else None
             bands = [_age_band(n) for n in nums]
             null_count = 0
             counts: dict = {}
@@ -274,6 +295,8 @@ def _dimension(df: pd.DataFrame, name: str, kind: str,
                     null_count += 1
             result = _analyze_groups(counts, n_total, null_count, skewness, min_share, min_group_size)
             result.update({"name": name, "kind": kind})
+            if implausible:
+                result["implausible_values"] = implausible
             return result
 
     # Categorical path (sex, race, geography, generic categorical, non-numeric age).
@@ -297,7 +320,8 @@ def _pick_cross(dims: list[dict], cross) -> tuple:
 
 
 def _intersections(df: pd.DataFrame, dims: list[dict],
-                   intersection_floor=INTERSECTION_FLOOR, cross=None) -> list[dict]:
+                   intersection_floor=INTERSECTION_FLOOR, cross=None,
+                   max_age=MAX_AGE) -> list[dict]:
     if len(dims) < 2:
         return []
     a, b = _pick_cross(dims, cross)
@@ -306,8 +330,8 @@ def _intersections(df: pd.DataFrame, dims: list[dict],
 
     def labelize(name, kind):
         if kind == "age" and not _looks_like_dates(df[name]):
-            nums = [_age_to_numeric(v) for v in df[name]]
-            if any(n is not None for n in nums):
+            nums, implausible = _age_numbers(df[name], max_age)
+            if implausible or any(n is not None for n in nums):
                 # Non-numeric age sentinels ("unknown", "prefer not to say")
                 # get their own categorical label here too, matching
                 # _dimension()'s main breakdown - otherwise labelize() maps
@@ -381,7 +405,8 @@ def _apply_reference(dimensions: list[dict], reference: dict,
 
 
 def _build_flags(dimensions: list[dict], intersections: list[dict],
-                 imbalance_flag=IMBALANCE_FLAG, missing_flag=MISSING_FLAG) -> list[str]:
+                 imbalance_flag=IMBALANCE_FLAG, missing_flag=MISSING_FLAG,
+                 max_age=MAX_AGE) -> list[str]:
     flags: list[str] = []
     for d in dimensions:
         for g in d["groups"]:
@@ -405,6 +430,12 @@ def _build_flags(dimensions: list[dict], intersections: list[dict],
         if d["missing_pct"] >= missing_flag:
             flags.append(
                 f"{d['name']}: {d['missing_pct'] * 100:.1f}% of values are missing"
+            )
+        if d.get("implausible_values"):
+            flags.append(
+                f"{d['name']}: {d['implausible_values']} implausible age value(s) "
+                f"above {max_age:g} were treated as missing, not banded "
+                f"(a mistyped age or a birth year?)"
             )
     for inter in intersections:
         a, b = inter["dims"]
@@ -492,7 +523,8 @@ def profile(df: pd.DataFrame, overrides=None, opts=None) -> dict:
     overrides = overrides or {}
     o = _resolve_opts(opts)
     detected = detect_columns(df, overrides, max_categorical_card=o["max_categorical_card"])
-    dimensions = [_dimension(df, d["name"], d["kind"], o["min_share"], o["min_group_size"])
+    dimensions = [_dimension(df, d["name"], d["kind"], o["min_share"], o["min_group_size"],
+                             o["max_age"])
                   for d in detected]
     # Drop identifier/date-like columns that exploded into many groups; geography
     # (cities, regions) legitimately has high cardinality, so it is exempt - as is
@@ -508,7 +540,8 @@ def profile(df: pd.DataFrame, overrides=None, opts=None) -> dict:
         if unknown:
             raise ValueError(
                 "cross column(s) don't match any profiled dimension: " + ", ".join(unknown))
-    intersections = _intersections(df, detected, o["intersection_floor"], o["cross"])
+    intersections = _intersections(df, detected, o["intersection_floor"], o["cross"],
+                                   o["max_age"])
 
     ref_flags = []
     if o["reference"]:
@@ -544,5 +577,5 @@ def profile(df: pd.DataFrame, overrides=None, opts=None) -> dict:
         "dimensions": dimensions,
         "intersections": intersections,
         "flags": _build_flags(dimensions, intersections,
-                              o["imbalance_flag"], o["missing_flag"]) + ref_flags,
+                              o["imbalance_flag"], o["missing_flag"], o["max_age"]) + ref_flags,
     }

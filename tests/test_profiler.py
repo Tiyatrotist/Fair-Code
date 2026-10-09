@@ -504,3 +504,49 @@ def test_date_column_dropped_not_garbage():
     names = {d["name"] for d in result["dimensions"]}
     assert "DateOfBirth" not in names
     assert "sex" in names
+
+
+# --- #840: implausible ages -----------------------------------------------------
+
+def _age_frame(ages):
+    return pd.DataFrame({"sex": ["M", "F"] * (len(ages) // 2), "age": ages})
+
+
+def _age_dim(result):
+    return next(d for d in result["dimensions"] if d["name"] == "age")
+
+
+def test_implausible_ages_are_not_banded_into_the_oldest_group():
+    result = profile(_age_frame([25, 30, 41, 200]))
+    age = _age_dim(result)
+    assert "75+" not in {g["label"] for g in age["groups"]}
+    assert age["implausible_values"] == 1
+    assert age["missing_pct"] == 0.25
+    assert any("1 implausible age value(s) above 120" in f for f in result["flags"])
+
+
+def test_plausible_ages_have_no_implausible_field_or_flag():
+    result = profile(_age_frame([25, 30, 41, 80]))
+    assert "implausible_values" not in _age_dim(result)
+    assert not any("implausible" in f for f in result["flags"])
+
+
+def test_max_age_option_moves_the_cutoff_and_is_validated():
+    ages = [25, 30, 41, 90]
+    assert "implausible_values" not in _age_dim(profile(_age_frame(ages)))
+    assert _age_dim(profile(_age_frame(ages), None, {"max_age": 80}))["implausible_values"] == 1
+    with pytest.raises(ValueError, match="max_age"):
+        profile(_age_frame(ages), None, {"max_age": 0})
+
+
+def test_a_birth_year_column_is_flagged_not_called_all_75_plus():
+    result = profile(_age_frame([1985, 1990, 1972, 2001]))
+    age = _age_dim(result)
+    assert age["n_groups"] == 0 and age["implausible_values"] == 4
+
+
+def test_implausible_ages_are_left_out_of_the_intersection():
+    df = pd.DataFrame({"sex": ["M", "F"] * 20, "age": [25, 200] * 20})
+    result = profile(df)
+    labels = {cell["b"] for inter in result["intersections"] for cell in inter["cells"]}
+    assert "75+" not in labels

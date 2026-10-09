@@ -336,10 +336,32 @@ def test_python_js_public_params_parity_for_a_defaulted_run():
     assert json.loads(completed.stdout) == expected
     assert set(expected) == {
         "cross", "imbalance_flag", "intersection_floor", "max_categorical_card",
-        "max_dimension_groups", "min_group_size", "min_share", "missing_flag",
+        "max_age", "max_dimension_groups", "min_group_size", "min_share", "missing_flag",
         "reference_flag",
     }
     assert "reference" not in expected
+
+
+def test_python_js_parity_for_implausible_ages(tmp_path):
+    """#840: ages above max_age are flagged and left out of the bands identically in
+    both engines, including in the intersection and with a custom --max-age."""
+    path = tmp_path / "ages.csv"
+    path.write_text("sex,age\n" + "\n".join(
+        f"{'M' if i % 2 else 'F'},{[25, 33, 47, 62, 80, 150, 200, 1985][i % 8]}" for i in range(64)) + "\n")
+    for opts in ({}, {"max_age": 70}):
+        opts_file = tmp_path / "opts.json"
+        opts_file.write_text(json.dumps({"overrides": {}, "opts": opts}))
+        python_result = dict(profile(pd.read_csv(path), None, opts))
+        completed = subprocess.run(
+            ["node", "scripts/engine-js.js", "profile", str(path), str(opts_file)],
+            capture_output=True, text=True, encoding="utf-8", check=True)
+        javascript_result = json.loads(completed.stdout)
+        py_flags, js_flags = python_result.pop("flags"), javascript_result.pop("flags")
+        assert javascript_result == python_result
+        age = next(d for d in python_result["dimensions"] if d["name"] == "age")
+        assert age["implausible_values"] == (24 if not opts else 32)
+        implausible = [f for f in py_flags if "implausible age" in f]
+        assert implausible and implausible == [f for f in js_flags if "implausible age" in f]
 
 
 def test_python_js_profiler_parity_with_overrides_cross_and_thresholds(tmp_path):
@@ -1049,7 +1071,7 @@ def test_compare_view_download_csv_and_proxy_controls_are_wired():
             assert f"getElementById('{element_id}')" in js, element_id
     assert "downloadCsvBtn.addEventListener('click', downloadCompareCsvReport)" in js
     assert "proxyBtn.addEventListener('click', renderCompareProxyHints)" in js
-    assert "E.proxyHints(slot.A.table, currentProfiles.A.dimensions, alpha, heldA, correction)" in js
+    assert "E.proxyHints(slot.A.table, currentProfiles.A.dimensions, alpha, heldA, correction, currentOpts.max_age)" in js
     assert 'id="compareProxyCorrectionInput"' in html
 
 

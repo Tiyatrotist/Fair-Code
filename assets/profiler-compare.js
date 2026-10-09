@@ -748,8 +748,8 @@
       proxyResultsEl.innerHTML = '<p class="profiler-error">' + esc(err.message) + '</p>';
       return;
     }
-    currentCmp.proxy_hints_a = E.proxyHints(slot.A.table, currentProfiles.A.dimensions, alpha, heldA, correction);
-    currentCmp.proxy_hints_b = E.proxyHints(slot.B.table, currentProfiles.B.dimensions, alpha, heldB, correction);
+    currentCmp.proxy_hints_a = E.proxyHints(slot.A.table, currentProfiles.A.dimensions, alpha, heldA, correction, currentOpts.max_age);
+    currentCmp.proxy_hints_b = E.proxyHints(slot.B.table, currentProfiles.B.dimensions, alpha, heldB, correction, currentOpts.max_age);
     proxyResultsEl.innerHTML = [['proxy_hints_a', 'A'], ['proxy_hints_b', 'B']].map(function (k) {
       var hints = currentCmp[k[0]];
       return '<h4 class="proxy-hint-side">Dataset ' + k[1] + '</h4>' + (hints.length

@@ -20,6 +20,7 @@
   var MAX_CATEGORICAL_CARD = 20;
   var MAX_DIMENSION_GROUPS = 50;
   var MIN_GROUP_SIZE = 100;  // warn when a subgroup has fewer than N rows (SPEC 3)
+  var MAX_AGE = 120;         // numeric ages above this are implausible, not banded (SPEC 2)
   var REFERENCE_DEVIATION_FLAG = 0.05;
   // Kinds a manual override may force a column to; mirror faircode/detect.py.
   var VALID_KINDS = { sex: 1, race: 1, age: 1, geography: 1, categorical: 1 };
@@ -34,6 +35,7 @@
     min_group_size: MIN_GROUP_SIZE,  // warn when a subgroup has fewer than N rows
     max_categorical_card: MAX_CATEGORICAL_CARD,
     max_dimension_groups: MAX_DIMENSION_GROUPS,
+    max_age: MAX_AGE,  // ages above this are not banded; flagged instead (SPEC 2)
     cross: null,      // [colA, colB] to force the intersection pair (SPEC 4)
     reference: null   // {column: {group: expected_share}} baseline (SPEC 8)
   };
@@ -63,6 +65,9 @@
     }
     if (o.max_dimension_groups !== null && o.max_dimension_groups !== undefined && o.max_dimension_groups < 1) {
       throw new Error('max_dimension_groups must be >= 1, got ' + o.max_dimension_groups);
+    }
+    if (o.max_age !== null && o.max_age !== undefined && !(o.max_age > 0)) {
+      throw new Error('max_age must be > 0, got ' + o.max_age);
     }
   }
 
@@ -530,6 +535,18 @@
     return Number.isFinite(numeric) && numeric >= AGE_BANDS[0] ? numeric : null;
   }
 
+  // Mirrors faircode.profiler._age_numbers (#840): per-cell numeric ages with those
+  // above maxAge removed (null, like a negative one), plus how many there were.
+  function ageNumbers(rows, name, maxAge) {
+    var nums = [], implausible = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var n = ageToNumeric(rows[i][name]);
+      if (n !== null && n > maxAge) { implausible++; n = null; }
+      nums.push(n);
+    }
+    return { nums: nums, implausible: implausible };
+  }
+
   function ageBand(num) {
     if (num === null || !Number.isFinite(num) || num < AGE_BANDS[0]) return null;
     for (var i = 0; i < AGE_BANDS.length - 1; i++) {
@@ -680,18 +697,18 @@
     };
   }
 
-  function dimension(table, name, kind, minShareThreshold, minGroupSize) {
+  function dimension(table, name, kind, minShareThreshold, minGroupSize, maxAge) {
     var rows = table.rows, nTotal = rows.length, i, v;
+    if (maxAge === undefined) maxAge = MAX_AGE;
 
     if (kind === 'age' && !looksLikeDates(rows, name)) {
-      var nums = [], numericVals = [];
+      var parsedAges = ageNumbers(rows, name, maxAge);
+      var nums = parsedAges.nums, numericVals = [];
       for (i = 0; i < nTotal; i++) {
-        var num = ageToNumeric(rows[i][name]);
-        nums.push(num);
-        if (num !== null) numericVals.push(num);
+        if (nums[i] !== null) numericVals.push(nums[i]);
       }
-      if (numericVals.length) {
-        var skew = skewness(numericVals);
+      if (numericVals.length || parsedAges.implausible) {
+        var skew = numericVals.length ? skewness(numericVals) : null;
         var counts = Object.create(null), nullCount = 0;
         for (i = 0; i < nums.length; i++) {
           var b = ageBand(nums[i]);
@@ -712,6 +729,7 @@
         }
         var res = analyzeGroups(counts, nTotal, nullCount, skew, minShareThreshold, minGroupSize);
         res.name = name; res.kind = kind;
+        if (parsedAges.implausible) res.implausible_values = parsedAges.implausible;
         return res;
       }
     }
@@ -731,17 +749,19 @@
   }
 
   // ── Intersectional gaps (SPEC section 4) ───────────────────────────────
-  function labelize(table, name, kind) {
+  function labelize(table, name, kind, maxAge) {
     var rows = table.rows, out = [], i;
+    if (maxAge === undefined) maxAge = MAX_AGE;
     if (kind === 'age' && !looksLikeDates(rows, name)) {
-      var any = false;
-      for (i = 0; i < rows.length; i++) {
-        if (ageToNumeric(rows[i][name]) !== null) { any = true; break; }
+      var parsedAges = ageNumbers(rows, name, maxAge);
+      var any = parsedAges.implausible > 0;
+      for (i = 0; i < rows.length && !any; i++) {
+        if (parsedAges.nums[i] !== null) any = true;
       }
       if (any) {
         for (i = 0; i < rows.length; i++) {
           var value = rows[i][name];
-          var num = ageToNumeric(value);
+          var num = parsedAges.nums[i];
           // Non-numeric age sentinels get their own categorical label here
           // too, matching dimension()'s main breakdown - otherwise they map
           // to null and intersections() drops those rows, so the crosstab
@@ -765,14 +785,14 @@
     return [dims[0], dims[1]];
   }
 
-  function intersections(table, dims, intersectionFloor, cross) {
+  function intersections(table, dims, intersectionFloor, cross, maxAge) {
     if (dims.length < 2) return [];
     if (intersectionFloor === undefined) intersectionFloor = INTERSECTION_FLOOR;
     var pair = pickCross(dims, cross), a = pair[0], b = pair[1];
     var nTotal = table.rows.length;
     var floor = intersectionFloor * nTotal;
-    var la = labelize(table, a.name, a.kind);
-    var lb = labelize(table, b.name, b.kind);
+    var la = labelize(table, a.name, a.kind, maxAge);
+    var lb = labelize(table, b.name, b.kind, maxAge);
 
     var ct = Object.create(null), aVals = Object.create(null), bVals = Object.create(null), i, key;
     for (i = 0; i < nTotal; i++) {
@@ -987,12 +1007,12 @@
     return h.p_adjusted !== undefined && h.n_tests !== undefined ? ' (m=' + h.n_tests + ' pairs)' : '';
   }
 
-  function proxyHints(table, dimensions, alpha, heldOut, multiCorrection) {
+  function proxyHints(table, dimensions, alpha, heldOut, multiCorrection, maxAge) {
     if (alpha === undefined) alpha = PROXY_ALPHA;
     if (!(alpha > 0 && alpha <= 1)) throw new Error('alpha must be in (0, 1], got ' + alpha);
     if (multiCorrection) adjustPValues([], multiCorrection); // validates the method name
     var labelized = {}, i, j, k;
-    dimensions.forEach(function (d) { labelized[d.name] = labelize(table, d.name, d.kind); });
+    dimensions.forEach(function (d) { labelized[d.name] = labelize(table, d.name, d.kind, maxAge); });
     Object.keys(heldOut || {}).forEach(function (name) { labelized[name] = heldOut[name]; });
     var names = Object.keys(labelized);
     var nTotal = table.rows.length;
@@ -1161,9 +1181,10 @@
     return flags;
   }
 
-  function buildFlags(dimensions, inters, imbalanceFlag, missingFlag) {
+  function buildFlags(dimensions, inters, imbalanceFlag, missingFlag, maxAge) {
     if (imbalanceFlag === undefined) imbalanceFlag = IMBALANCE_FLAG;
     if (missingFlag === undefined) missingFlag = MISSING_FLAG;
+    if (maxAge === undefined) maxAge = MAX_AGE;
     var flags = [];
     dimensions.forEach(function (d) {
       d.groups.forEach(function (g) {
@@ -1188,6 +1209,11 @@
         flags.push(d.name + ': ' + (d.missing_pct * 100).toFixed(1) +
                    '% of values are missing');
       }
+      if (d.implausible_values) {
+        flags.push(d.name + ': ' + d.implausible_values + ' implausible age value(s) above ' +
+                   maxAge + ' were treated as missing, not banded ' +
+                   '(a mistyped age or a birth year?)');
+      }
     });
     inters.forEach(function (inter) {
       var a = inter.dims[0], b = inter.dims[1];
@@ -1205,7 +1231,7 @@
     var o = resolveOpts(opts);
     var detected = detectColumns(table, overrides, o.max_categorical_card);
     var dimensions = detected.map(function (d) {
-      return dimension(table, d.name, d.kind, o.min_share, o.min_group_size);
+      return dimension(table, d.name, d.kind, o.min_share, o.min_group_size, o.max_age);
     });
     var forced = {};
     Object.keys(overrides).forEach(function (col) {
@@ -1224,7 +1250,7 @@
         throw new Error("cross column(s) don't match any profiled dimension: " + unknownCross.join(", "));
       }
     }
-    var inters = intersections(table, detected, o.intersection_floor, o.cross);
+    var inters = intersections(table, detected, o.intersection_floor, o.cross, o.max_age);
 
     var refFlags = [];
     if (o.reference) {
@@ -1270,7 +1296,7 @@
       note: note,
       dimensions: dimensions,
       intersections: inters,
-      flags: buildFlags(dimensions, inters, o.imbalance_flag, o.missing_flag).concat(refFlags)
+      flags: buildFlags(dimensions, inters, o.imbalance_flag, o.missing_flag, o.max_age).concat(refFlags)
     };
   }
 
