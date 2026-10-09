@@ -919,6 +919,17 @@
     return out;
   }
 
+  // faircode/proxy.py LOW_EXPECTED_COUNT / LOW_EXPECTED_SHARE (#810): a table is
+  // `low_expected` when over 20% of its cells expect fewer than 5 rows, which
+  // makes the chi-squared p-value unreliable. Must mirror proxy.py.
+  var LOW_EXPECTED_COUNT = 5, LOW_EXPECTED_SHARE = 0.2;
+
+  // Suffix for a hint's text line, mirroring report.py's _hint_notes() minus the
+  // adjusted p-value (each renderer formats that itself).
+  function proxyNotes(h) {
+    return h.low_expected ? ', small cells (p-value unreliable)' : '';
+  }
+
   function proxyHints(table, dimensions, alpha, heldOut, multiCorrection) {
     if (alpha === undefined) alpha = PROXY_ALPHA;
     if (!(alpha > 0 && alpha <= 1)) throw new Error('alpha must be in (0, 1], got ' + alpha);
@@ -962,11 +973,12 @@
         // continuity correction applies only when dof === 1 (a 2x2 table).
         var dof = (aKeys.length - 1) * (bKeys.length - 1);
         var correction = dof === 1;
-        var chi2 = 0;
+        var chi2 = 0, lowCells = 0;
         aKeys.forEach(function (av) {
           bKeys.forEach(function (bv) {
             var observed = ct[av + '\0' + bv] || 0;
             var expected = (rowTotals[av] * colTotals[bv]) / n;
+            if (expected < LOW_EXPECTED_COUNT) lowCells++;
             if (!expected) return;
             var diff = Math.abs(observed - expected);
             if (correction) diff = Math.max(0, diff - 0.5);
@@ -977,11 +989,14 @@
         var pValue = chiSquarePValue(chi2, dof);
         var kMinusOne = Math.min(aKeys.length, bKeys.length) - 1;
         var cramersV = (n && kMinusOne) ? Math.sqrt(chi2 / (n * kMinusOne)) : 0;
+        var lowShare = lowCells / (aKeys.length * bKeys.length);
         tested.push({
           a: nameA, b: nameB,
           p_value: pValue,
           cramers_v: Math.round(cramersV * 10000) / 10000,
-          chi2: Math.round(chi2 * 100) / 100
+          chi2: Math.round(chi2 * 100) / 100,
+          low_expected_share: Math.round(lowShare * 10000) / 10000,
+          low_expected: lowShare > LOW_EXPECTED_SHARE
         });
       }
     }
@@ -992,7 +1007,8 @@
       tested.forEach(function (h, idx) {
         if (adjusted[idx] < alpha) {
           hints.push({ a: h.a, b: h.b, p_value: h.p_value, cramers_v: h.cramers_v,
-                       chi2: h.chi2, p_adjusted: adjusted[idx] });
+                       chi2: h.chi2, low_expected_share: h.low_expected_share,
+                       low_expected: h.low_expected, p_adjusted: adjusted[idx] });
         }
       });
     }
@@ -1424,7 +1440,7 @@
                               // Opt-in, informational only (issue #738) - see
                               // proxyHints()'s own comment for why this is
                               // kept out of profile()/compare().
-                              proxyHints: proxyHints, parseHeldOut: parseHeldOut, buildHeldOut: buildHeldOut,
+                              proxyHints: proxyHints, proxyNotes: proxyNotes, parseHeldOut: parseHeldOut, buildHeldOut: buildHeldOut,
                               adjustPValues: adjustPValues,
                               csvField: csvField, csvRow: csvRow, provenanceCsv: provenanceCsv,
                               // publicParams: resolved knobs for an export's

@@ -80,10 +80,15 @@ def _dim_score_text(d: dict) -> str:
     return "not measured" if d["n_groups"] == 0 else f"{d['dimension_score']}/100"
 
 
-def _adj_text(h) -> str:
-    """", adj p=..." suffix for a hint that carries a multiple-comparison
-    adjusted p-value (#806); empty for the default uncorrected hints."""
-    return f", adj p={h['p_adjusted']:.4g}" if "p_adjusted" in h else ""
+def _hint_notes(h) -> str:
+    """Suffix for a proxy hint line: ", adj p=..." when it carries a
+    multiple-comparison adjusted p-value (#806), and ", small cells" when
+    over 20% of its expected counts are under 5 so the chi-squared p-value is
+    unreliable (#810)."""
+    text = f", adj p={h['p_adjusted']:.4g}" if "p_adjusted" in h else ""
+    if h.get("low_expected"):
+        text += ", small cells (p-value unreliable)"
+    return text
 
 
 def _write_proxy_rows(writer, hints, side=None) -> None:
@@ -92,10 +97,10 @@ def _write_proxy_rows(writer, hints, side=None) -> None:
     prefix = ["dataset"] if side else []
     adjusted = any("p_adjusted" in h for h in hints)
     writer.writerow(prefix + ["proxy_hint_a", "proxy_hint_b", "p_value", "cramers_v"]
-                    + (["p_adjusted"] if adjusted else []))
+                    + (["p_adjusted"] if adjusted else []) + ["low_expected"])
     for h in hints:
         writer.writerow(([side] if side else []) + [h["a"], h["b"], h["p_value"], h["cramers_v"]]
-                        + ([h.get("p_adjusted")] if adjusted else []))
+                        + ([h.get("p_adjusted")] if adjusted else []) + [h.get("low_expected", False)])
 
 
 def to_csv(result: dict, provenance: dict | None = None) -> str:
@@ -236,7 +241,7 @@ def to_terminal(result: dict) -> str:
         add("=" * WIDTH)
         for h in result["proxy_hints"]:
             add(f"  ~ {h['a']} ↔ {h['b']}  "
-                f"(χ² p={h['p_value']:.4g}, Cramér's V={h['cramers_v']:.2f}{_adj_text(h)})")
+                f"(χ² p={h['p_value']:.4g}, Cramér's V={h['cramers_v']:.2f}{_hint_notes(h)})")
         add("")
 
     add("=" * WIDTH)
@@ -329,7 +334,7 @@ def compare_to_terminal(cmp: dict) -> str:
             add("=" * WIDTH)
             for h in cmp[key]:
                 add(f"  ~ {h['a']} ↔ {h['b']}  "
-                    f"(χ² p={h['p_value']:.4g}, Cramér's V={h['cramers_v']:.2f}{_adj_text(h)})")
+                    f"(χ² p={h['p_value']:.4g}, Cramér's V={h['cramers_v']:.2f}{_hint_notes(h)})")
             add("")
 
     if cmp["flags"]:
@@ -478,7 +483,7 @@ def to_html(result: dict) -> str:
     if result.get("proxy_hints"):
         items = "".join(
             f'<li>{esc(h["a"])} ↔ {esc(h["b"])} '
-            f'(χ² p={h["p_value"]:.4g}, Cramér\'s V={h["cramers_v"]:.2f}{_adj_text(h)})</li>'
+            f'(χ² p={h["p_value"]:.4g}, Cramér\'s V={h["cramers_v"]:.2f}{_hint_notes(h)})</li>'
             for h in result["proxy_hints"]
         )
         proxy_html = (
@@ -674,7 +679,7 @@ def compare_to_html(cmp: dict) -> str:
         if cmp.get(key):
             items = "".join(
                 f'<li>{esc(h["a"])} ↔ {esc(h["b"])} '
-                f'(χ² p={h["p_value"]:.4g}, Cramér\'s V={h["cramers_v"]:.2f}{_adj_text(h)})</li>'
+                f'(χ² p={h["p_value"]:.4g}, Cramér\'s V={h["cramers_v"]:.2f}{_hint_notes(h)})</li>'
                 for h in cmp[key]
             )
             proxy_html += (

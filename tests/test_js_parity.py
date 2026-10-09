@@ -823,6 +823,30 @@ def test_python_js_proxy_hints_parity_on_a_correlated_pair(tmp_path):
     assert py_hint["chi2"] == js_hint["chi2"]
     assert py_hint["cramers_v"] == js_hint["cramers_v"]
     assert py_hint["p_value"] == pytest.approx(js_hint["p_value"], rel=1e-6)
+    # #810: the small-cell diagnostics must agree too
+    assert py_hint["low_expected_share"] == js_hint["low_expected_share"]
+    assert py_hint["low_expected"] == js_hint["low_expected"]
+
+
+def test_python_js_proxy_hints_parity_flags_small_expected_cells(tmp_path):
+    """#810: a sparse high-cardinality pair is flagged low_expected by both engines."""
+    pytest.importorskip("scipy")
+    from faircode.detect import detect_columns
+    from faircode.proxy import proxy_hints
+
+    rows = ["sex,race"]
+    races = ["White", "Black", "Asian", "Latino", "Other", "Native"]
+    for i in range(24):
+        rows.append(f"{'male' if i % 2 == 0 else 'female'},{races[(i // 2 + i) % 6]}")
+    csv = tmp_path / "sparse.csv"
+    csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    df = pd.read_csv(csv)
+    dims = [{"name": d["name"], "kind": d["kind"]} for d in detect_columns(df)]
+    py = proxy_hints(df, dims, alpha=1.0)
+    js = _run_js_proxy_hints(csv, alpha=1.0)
+    assert len(py) == len(js) == 1
+    assert py[0]["low_expected"] is True and js[0]["low_expected"] is True
+    assert py[0]["low_expected_share"] == js[0]["low_expected_share"] > 0.2
 
 
 def test_python_js_proxy_hints_parity_finds_nothing_for_unrelated_columns(tmp_path):
@@ -913,7 +937,7 @@ def test_web_csv_export_matches_python_to_csv(tmp_path):
     result["proxy_hints"] = proxy_hints(df, dims, alpha=0.9)
     with_hints = _run_ui_exports(path, True)["csv"].splitlines()
     py = to_csv(result).splitlines()
-    i = with_hints.index("proxy_hint_a,proxy_hint_b,p_value,cramers_v")
+    i = with_hints.index("proxy_hint_a,proxy_hint_b,p_value,cramers_v,low_expected")
     assert with_hints[:i] == py[:i]
     assert with_hints[i + 1].startswith("sex,race,") and py[i + 1].startswith("sex,race,")
 
@@ -978,7 +1002,7 @@ def test_web_compare_csv_and_html_match_python_and_include_proxy_hints(tmp_path)
         return [[norm(c) for c in row] for row in csv.reader(io.StringIO(body))]
 
     assert head(out["plain"]) == head(py)
-    assert "dataset,proxy_hint_a,proxy_hint_b,p_value,cramers_v" in out["csv"]
+    assert "dataset,proxy_hint_a,proxy_hint_b,p_value,cramers_v,low_expected" in out["csv"]
     assert "Proxy hints - A" in out["html"] and "Proxy hints - B" in out["html"]
 
 

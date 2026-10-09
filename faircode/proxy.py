@@ -20,6 +20,13 @@ import pandas as pd
 from .profiler import _age_band, _age_to_numeric, _is_categorical_age_sentinel, _looks_like_dates
 
 PROXY_ALPHA = 0.05
+
+# Chi-squared rule of thumb (#810): the approximation is unreliable when an
+# expected cell count is below this, and a table is flagged `low_expected` when
+# more than LOW_EXPECTED_SHARE of its cells fall under it. Mirrored in
+# assets/profiler-engine.js.
+LOW_EXPECTED_COUNT = 5
+LOW_EXPECTED_SHARE = 0.2
 PROXY_CORRECTIONS = ("bonferroni", "holm")
 
 
@@ -106,6 +113,12 @@ def proxy_hints(df: pd.DataFrame, dimensions: list, alpha=PROXY_ALPHA,
     Returns pairs with p < alpha, most-significant first, each with its p-value
     and Cramér's V effect size. Raises RuntimeError if scipy is unavailable.
 
+    Each hint also carries `low_expected_share` (the share of contingency cells
+    whose expected count is under 5) and `low_expected` (true when that share
+    exceeds 20%): the chi-squared p-value is unreliable for such a table - a
+    high-cardinality categorical or a rare group - so treat it as a lead, not
+    a finding (#810).
+
     `held_out` is an optional {column_name: pandas.Series} map for testing
     against a protected attribute that has already been dropped from `df` -
     "we dropped the column so it's fine" is the exact failure mode this
@@ -144,7 +157,8 @@ def proxy_hints(df: pd.DataFrame, dimensions: list, alpha=PROXY_ALPHA,
             ct = pd.crosstab(labelized[name_a], labelized[name_b])
             if ct.shape[0] < 2 or ct.shape[1] < 2:
                 continue
-            chi2, p_value, _dof, _exp = chi2_contingency(ct)
+            chi2, p_value, _dof, expected = chi2_contingency(ct)
+            low_share = float((expected < LOW_EXPECTED_COUNT).mean())
             n = int(ct.to_numpy().sum())
             k = min(ct.shape) - 1
             cramers_v = math.sqrt(chi2 / (n * k)) if n and k else 0.0
@@ -153,6 +167,8 @@ def proxy_hints(df: pd.DataFrame, dimensions: list, alpha=PROXY_ALPHA,
                 "p_value": p_value,
                 "cramers_v": round(cramers_v, 4),
                 "chi2": round(float(chi2), 2),
+                "low_expected_share": round(low_share, 4),
+                "low_expected": low_share > LOW_EXPECTED_SHARE,
             })
     if correction is None:
         hints = [h for h in tested if h["p_value"] < alpha]

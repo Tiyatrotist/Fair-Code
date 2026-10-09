@@ -137,6 +137,12 @@ running maximum - reports a pair only when its *adjusted* p is below alpha, and 
 each hint. The default (no correction) is unchanged. `faircode.proxy.adjust_p_values` and the JS
 `adjustPValues` are cross-checked in `tests/test_js_parity.py`.
 
+**Small expected cells (#810).** The chi-squared approximation is unreliable when many contingency
+cells expect fewer than 5 rows (high-cardinality categoricals, rare groups). Every hint therefore
+carries `low_expected_share` (share of cells with expected count < 5, 4 dp) and `low_expected`
+(`true` when that share exceeds 0.2). The terminal/HTML/web output marks such a hint "small cells",
+and the CSV proxy section gains a `low_expected` column. The p-value is still computed and reported.
+
 **Limitation - a dropped column is invisible by construction.** `proxy_hints()` only tests pairs
 drawn from `dimensions`, the columns actually present in the profiled data. If a protected attribute
 was already removed before profiling - "we dropped the column so it's fine" - it can never be one
@@ -537,7 +543,7 @@ each preceded by a blank row and its own header, in this order:
 2. reference baseline (only when `--reference` was used) -
    `dimension,reference_label,expected,actual,delta,reference_deviation`;
 3. proxy hints (only when run) - `proxy_hint_a,proxy_hint_b,p_value,cramers_v`, plus `p_adjusted`
-   when a correction was requested;
+   when a correction was requested, then `low_expected`;
 4. provenance (only with `--csv-provenance` / the web checkbox / MCP `include_provenance`) -
    `provenance_key,provenance_value`, nested objects flattened to dotted keys (`params.min_share`),
    lists as JSON text, `null` as an empty cell. The values are exactly the block `--json` attaches

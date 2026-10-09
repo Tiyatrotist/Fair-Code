@@ -167,3 +167,25 @@ def test_proxy_hints_correction_adds_p_adjusted_and_is_stricter():
     assert len(strict) <= len(proxy_hints(df, dims, alpha=0.05))
     with pytest.raises(ValueError, match="correction"):
         proxy_hints(df, dims, correction="nope")
+
+
+def test_proxy_hints_flag_small_expected_cells():
+    """#810: a sparse table is marked low_expected; a well-populated one is not."""
+    sparse = pd.DataFrame({
+        "sex": ["M", "F"] * 12,
+        "race": ["a", "b", "c", "d", "e", "f"] * 4,
+    })
+    dense = pd.DataFrame({"sex": ["M", "F"] * 40, "race": ["a", "b"] * 40})
+    dims = [{"name": "sex", "kind": "sex"}, {"name": "race", "kind": "race"}]
+    (small,) = proxy_hints(sparse, dims, alpha=1.0)
+    (big,) = proxy_hints(dense, dims, alpha=1.0)
+    assert small["low_expected"] is True and small["low_expected_share"] > 0.2
+    assert big["low_expected"] is False and big["low_expected_share"] == 0.0
+
+
+def test_terminal_report_marks_small_cell_hints():
+    from faircode.report import to_terminal
+    result = profile(pd.DataFrame({"sex": ["M", "F"] * 12, "race": ["a", "b", "c", "d", "e", "f"] * 4}))
+    result["proxy_hints"] = [{"a": "sex", "b": "race", "p_value": 0.01, "cramers_v": 0.4,
+                              "chi2": 5.0, "low_expected_share": 0.5, "low_expected": True}]
+    assert "small cells" in to_terminal(result)

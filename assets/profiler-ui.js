@@ -466,7 +466,8 @@
       row.innerHTML = '<span class="proxy-hint-pair">' + esc(h.a) + ' × ' + esc(h.b) + '</span>' +
         '<span class="proxy-hint-stats">p ' + h.p_value.toExponential(2) +
         ' · Cramer’s V ' + h.cramers_v.toFixed(4) +
-        (h.p_adjusted !== undefined ? ' · adj p ' + h.p_adjusted.toExponential(2) : '') + '</span>';
+        (h.p_adjusted !== undefined ? ' · adj p ' + h.p_adjusted.toExponential(2) : '') +
+        (h.low_expected ? ' · small cells ⚠' : '') + '</span>';
       list.appendChild(row);
     });
     host.appendChild(list);
@@ -729,7 +730,7 @@
         '(chi-squared association, informational)</span></h2><ul>' +
         r.proxy_hints.map(function (h) {
           return '<li>' + esc(h.a) + ' ↔ ' + esc(h.b) + ' (χ² p=' + h.p_value.toPrecision(4) +
-            ', Cramér’s V=' + h.cramers_v.toFixed(2) + (h.p_adjusted !== undefined ? ', adj p=' + h.p_adjusted.toPrecision(4) : '') + ')</li>';
+            ', Cramér’s V=' + h.cramers_v.toFixed(2) + (h.p_adjusted !== undefined ? ', adj p=' + h.p_adjusted.toPrecision(4) : '') + E.proxyNotes(h) + ')</li>';
         }).join('') + '</ul></section>';
     }
     var dimBlocks = r.dimensions.map(function (d) {
@@ -860,9 +861,9 @@
     }
     if (r.proxy_hints && r.proxy_hints.length) {
       var adj = r.proxy_hints.some(function (h) { return h.p_adjusted !== undefined; });
-      out += csvRow([]) + csvRow(['proxy_hint_a', 'proxy_hint_b', 'p_value', 'cramers_v'].concat(adj ? ['p_adjusted'] : []));
+      out += csvRow([]) + csvRow(['proxy_hint_a', 'proxy_hint_b', 'p_value', 'cramers_v'].concat(adj ? ['p_adjusted'] : [], ['low_expected']));
       r.proxy_hints.forEach(function (h) {
-        out += csvRow([h.a, h.b, h.p_value, h.cramers_v].concat(adj ? [h.p_adjusted] : []));
+        out += csvRow([h.a, h.b, h.p_value, h.cramers_v].concat(adj ? [h.p_adjusted] : [], [!!h.low_expected]));
       });
     }
     if (provenance) out += csvRow([]) + E.provenanceCsv(provenance);
