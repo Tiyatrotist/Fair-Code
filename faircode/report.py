@@ -11,6 +11,7 @@ import csv
 import html
 import io
 import json
+import re
 
 WIDTH = 62
 DISPLAY_GROUPS = 12  # cap rows shown per dimension; full data stays in the result
@@ -142,6 +143,19 @@ def to_csv(result: dict, provenance: dict | None = None) -> str:
     return buf.getvalue()
 
 
+_CONTROL_CHARS = re.compile("[\x00-\x08\x0a-\x1f\x7f-\x9f]")
+
+
+def _visible(text: str) -> str:
+    """Replace C0/C1 control characters (tab excepted) with visible \\xNN escapes.
+
+    Terminal output only: a dataset value holding an ANSI/OSC sequence must not
+    recolour or rewrite the audit it appears in (#845). JSON/CSV/HTML keep the
+    raw value.
+    """
+    return _CONTROL_CHARS.sub(lambda m: f"\\x{ord(m.group()):02x}", text)
+
+
 def _bar(share: float, width: int = 24) -> str:
     filled = round(share * width)
     return "█" * filled + "·" * (width - filled)
@@ -149,7 +163,9 @@ def _bar(share: float, width: int = 24) -> str:
 
 def to_terminal(result: dict) -> str:
     lines: list[str] = []
-    add = lines.append
+
+    def add(line: str) -> None:
+        lines.append(_visible(line))
 
     add("=" * WIDTH)
     add("FAIR CODE - DATASET REPRESENTATION PROFILE")
@@ -254,7 +270,9 @@ def _dataset_score_line(dataset: dict) -> str:
 def compare_to_terminal(cmp: dict) -> str:
     """Render a compare() result (SPEC section 8) as terminal text."""
     lines: list[str] = []
-    add = lines.append
+
+    def add(line: str) -> None:
+        lines.append(_visible(line))
     a, b = cmp["a"], cmp["b"]
 
     add("=" * WIDTH)

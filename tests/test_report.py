@@ -671,3 +671,22 @@ def test_csv_exports_defuse_spreadsheet_formula_injection():
     assert rows[1][0] == "'+x" and rows[1][2] == "'=HYPERLINK(\"http://x\")"
     assert rows[1][4] == "-0.5"
     assert ["'=cmd"] in rows
+
+
+def test_terminal_reports_escape_control_characters_from_dataset_values():
+    """#845: an escape sequence in a group label or column name must not reach the terminal."""
+    df = pd.DataFrame({"sex": ["\x1b[31mRED", "F", "M", "F"], "age\x1b]0;pwned\x07": [20, 30, 40, 50]})
+    result = profile(df)
+    out = to_terminal(result)
+    assert "\x1b" not in out and "\x07" not in out
+    assert "\\x1b[31mRED" in out
+    # JSON-style data stays lossless
+    assert any(g["label"] == "\x1b[31mRED" for d in result["dimensions"] for g in d["groups"])
+
+
+def test_compare_terminal_escapes_control_characters():
+    a = profile(pd.DataFrame({"sex": ["\x1b[2JM", "F", "M", "F"]}))
+    b = profile(pd.DataFrame({"sex": ["\x1b[2JM", "F", "F", "F"]}))
+    out = compare_to_terminal(compare(a, b, name_a="a\x1b[1m.csv", name_b="b.csv"))
+    assert "\x1b" not in out
+    assert "\\x1b[1m" in out
