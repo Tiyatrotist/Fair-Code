@@ -47,7 +47,7 @@ from .loaders_extra import (
 )
 from .profiler import _resolve_opts, parse_reference, profile
 from .provenance import build as build_provenance
-from .proxy import parse_held_out_specs
+from .proxy import PROXY_ALPHA, parse_held_out_specs
 from .proxy import proxy_hints as compute_proxy_hints
 from .report import compare_to_csv, to_csv
 
@@ -269,7 +269,7 @@ def _compare_datasets_impl(path_a, path_b, overrides=None,
 
 
 def _proxy_hints_impl(path, overrides=None, held_out_with=None, alpha=None,
-                      correction=None, encoding=None):
+                      correction=None, encoding=None, include_provenance=True):
     """`overrides` forces a column's detected kind the same way profile()'s
     own `overrides` does; no other threshold knob affects this tool -
     proxy_hints() (faircode/proxy.py) tests every detected dimension
@@ -286,6 +286,9 @@ def _proxy_hints_impl(path, overrides=None, held_out_with=None, alpha=None,
     been dropped from the dataset at `path`. Parsed via proxy.py's shared
     parse_held_out_specs, so the column/row-count validation is identical to
     the CLI's.
+
+    `include_provenance` (default true) attaches a provenance block containing
+    the dataset hash, alpha, correction, overrides, and held-out files (#860).
 
     Returns a dict, not a bare list: the MCP SDK splits a list return value
     into one content block per element (confirmed - a 98-item result became
@@ -310,6 +313,13 @@ def _proxy_hints_impl(path, overrides=None, held_out_with=None, alpha=None,
     enc_notes = [n for n in (encoding_ignored_note(path, encoding),) if n]
     if enc_notes:
         output["notes"] = enc_notes
+    if include_provenance:
+        output["provenance"] = build_provenance(
+            [("dataset_hash", path)],
+            params={"alpha": PROXY_ALPHA if alpha is None else alpha, "correction": correction},
+            overrides=overrides,
+            held_out=[("proxy_hints_with", held_out_with)] if held_out_with else (),
+        )
     return output
 
 
@@ -556,7 +566,8 @@ def build_server():
                     held_out_with: list[str] | None = None,
                     alpha: float | None = None,
                     correction: str | None = None,
-                    encoding: str | None = None) -> dict:
+                    encoding: str | None = None,
+                    include_provenance: bool = True) -> dict:
         """Flag pairs of detected demographic columns that are strongly
         statistically associated (chi-squared test of independence, p < `alpha`,
         default 0.05, in (0, 1])
@@ -581,9 +592,13 @@ def build_server():
         joined to it on a key column present in both files) and a column to pull the
         dropped attribute's original values from. See faircode/SPEC.md
         section 3 and issue #328.
+
+        `include_provenance` (default true) attaches a provenance block
+        (dataset_hash, alpha, correction, overrides, proxy_hints_with) to
+        tie the hints back to the exact dataset and parameters that produced them (#860).
         """
         try:
-            return _proxy_hints_impl(path, overrides, held_out_with, alpha, correction, encoding)
+            return _proxy_hints_impl(path, overrides, held_out_with, alpha, correction, encoding, include_provenance)
         except (ValueError, FileNotFoundError, RuntimeError) as exc:
             raise _as_tool_error(exc) from exc
 
