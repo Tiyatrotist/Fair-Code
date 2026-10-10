@@ -134,24 +134,27 @@ def _alpha(args):
     return PROXY_ALPHA if args.proxy_alpha is None else args.proxy_alpha
 
 
-def _profile_provenance(args, opts, overrides):
+def _profile_provenance(args, opts, overrides, df=None):
     digests = [] if args.sample else [("dataset_hash", args.csv)]
     if args.reference:
         digests.append(("reference_hash", args.reference))
+    columns = None if df is None else list(df.columns)
     provenance = build_provenance(digests, _resolve_opts(opts), overrides,
-                                  held_out=[("proxy_hints_with", args.proxy_hints_with)])
+                                  held_out=[("proxy_hints_with", args.proxy_hints_with, columns)])
     if args.sample:
         provenance["dataset_hash"] = "sha256:" + hashlib.sha256(
             build_sample_csv().encode("utf-8")).hexdigest()
     return provenance
 
 
-def _compare_provenance(args, opts, overrides):
+def _compare_provenance(args, opts, overrides, df_a=None, df_b=None):
+    cols_a = None if df_a is None else list(df_a.columns)
+    cols_b = None if df_b is None else list(df_b.columns)
     return build_provenance(
         [("dataset_hash_a", args.csv_a), ("dataset_hash_b", args.csv_b)],
         _resolve_opts(opts), overrides,
-        held_out=[("proxy_hints_with_a", args.proxy_hints_with_a),
-                  ("proxy_hints_with_b", args.proxy_hints_with_b)])
+        held_out=[("proxy_hints_with_a", args.proxy_hints_with_a, cols_a),
+                  ("proxy_hints_with_b", args.proxy_hints_with_b, cols_b)])
 
 
 def _write_csv_export(path, text, bom=False):
@@ -505,7 +508,7 @@ def main(argv: list[str] | None = None) -> int:
                   file=sys.stderr)
             return 2
         if args.csv_out:
-            prov = _profile_provenance(args, opts, overrides) if args.csv_provenance else None
+            prov = _profile_provenance(args, opts, overrides, df) if args.csv_provenance else None
             if _write_csv_export(args.csv_out, to_csv(result, provenance=prov),
                                     bom=args.csv_bom):
                 return 2
@@ -513,7 +516,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.json:
             provenance = None
             if not args.no_provenance:
-                provenance = _profile_provenance(args, opts, overrides)
+                provenance = _profile_provenance(args, opts, overrides, df)
             print(to_json(result, provenance=provenance))
         elif args.csv_out != "-":  # stdout already carries the CSV
             print(to_terminal(result))
@@ -641,14 +644,14 @@ def main(argv: list[str] | None = None) -> int:
                   file=sys.stderr)
             return 2
         if args.csv_out:
-            prov = _compare_provenance(args, opts, overrides) if args.csv_provenance else None
+            prov = _compare_provenance(args, opts, overrides, df_a, df_b) if args.csv_provenance else None
             if _write_csv_export(args.csv_out, compare_to_csv(result, provenance=prov),
                                     bom=args.csv_bom):
                 return 2
         if args.json:
             provenance = None
             if not args.no_provenance:
-                provenance = _compare_provenance(args, opts, overrides)
+                provenance = _compare_provenance(args, opts, overrides, df_a, df_b)
             print(to_json(result, provenance=provenance))
         elif args.csv_out != "-":
             print(compare_to_terminal(result))

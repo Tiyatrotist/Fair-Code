@@ -5,7 +5,10 @@
    of columns, .csv/.tsv/.json/.xlsx) and collects them into the specs that
    FairCodeProfiler.buildHeldOut() turns into a {column: values} map - the
    browser counterpart of repeating --proxy-hints-with PATH=COLUMN. Shared by
-   the single-dataset and compare views.
+   the single-dataset and compare views. Column and join key are separate
+   inputs (#822/#869), so a held-out column whose name contains a colon
+   (e.g. race:self_reported) needs no escaping here - unlike the CLI's
+   PATH=COLUMN:KEY string form.
    ════════════════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -29,7 +32,7 @@
       var col = document.createElement('input');
       col.type = 'text';
       col.className = 'threshold-input';
-      col.placeholder = 'e.g. race';
+      col.placeholder = 'e.g. race or race:self_reported';
       col.autocomplete = 'off';
       col.setAttribute('aria-label', label + ' column name');
       colLabel.appendChild(col);

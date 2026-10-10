@@ -259,7 +259,9 @@ def test_held_out_key_rejects_bad_keys(held_override, df_override, message):
 def test_held_out_key_must_exist_in_both_files_and_differ_from_the_column():
     from faircode.proxy import parse_held_out_specs
     df, held = _joined_frames()
-    with pytest.raises(ValueError, match="not found in the profiled dataset"):
+    # #869: a suffix that is not a profiled column falls back to the whole
+    # string as the column name, so race:nope looks for column "race:nope".
+    with pytest.raises(ValueError, match="column 'race:nope' not found"):
         parse_held_out_specs(["h.csv=race:nope"], df, lambda _p: held)
     with pytest.raises(ValueError, match="not found in h.csv"):
         parse_held_out_specs(["h.csv=race:zip"], df, lambda _p: held)
@@ -286,3 +288,53 @@ def test_held_out_key_feeds_proxy_hints(tmp_path):
     assert any({h["a"], h["b"]} == {"zip_code", "race"} for h in result["proxy_hints"])
     entry = result["provenance"]["proxy_hints_with"][0]
     assert entry["column"] == "race" and entry["key"] == "id"
+
+
+# --- #869: held-out column names that contain a colon --------------------------
+
+def test_held_out_column_with_colon_falls_back_when_suffix_is_not_a_key():
+    """PATH=a:b keeps column a:b when b is not a profiled column (#869)."""
+    from faircode.proxy import parse_held_out_specs, split_held_out_spec
+    df = pd.DataFrame({"zip": ["1", "1", "2", "2"]})
+    held = pd.DataFrame({"a:b": ["A", "A", "B", "B"], "x": [1, 2, 3, 4]})
+    assert split_held_out_spec("h.csv=a:b", df.columns) == ("h.csv", "a:b", None)
+    out = parse_held_out_specs(["h.csv=a:b"], df, lambda _p: held)
+    assert list(out["a:b"]) == ["A", "A", "B", "B"]
+
+
+def test_held_out_column_with_colon_escape_always_keeps_literal_colon():
+    """PATH=a\\:b is column a:b even when b is a profiled column (#869)."""
+    from faircode.proxy import parse_held_out_specs, split_held_out_spec
+    df = pd.DataFrame({"b": [1, 2, 3, 4], "zip": ["1", "1", "2", "2"]})
+    held = pd.DataFrame({"a:b": ["A", "A", "B", "B"]})
+    assert split_held_out_spec(r"h.csv=a\:b", df.columns) == ("h.csv", "a:b", None)
+    out = parse_held_out_specs([r"h.csv=a\:b"], df, lambda _p: held)
+    assert list(out["a:b"]) == ["A", "A", "B", "B"]
+
+
+def test_held_out_escaped_colon_column_still_accepts_a_join_key():
+    """PATH=a\\:b:id joins on id with held-out column a:b (#869)."""
+    from faircode.proxy import parse_held_out_specs
+    df = pd.DataFrame({"id": [1, 2, 3, 4], "zip": ["1", "1", "2", "2"]})
+    held = pd.DataFrame({"id": [4, 2, 3, 1], "a:b": ["B", "A", "B", "A"]})
+    out = parse_held_out_specs([r"h.csv=a\:b:id"], df, lambda _p: held)
+    assert list(out["a:b"]) == ["A", "A", "B", "B"]
+
+
+def test_held_out_colon_column_cli_repro(tmp_path):
+    """Issue #869 repro: profile with PATH=a:b no longer misreads column a."""
+    from faircode.cli import main
+    import io
+    from contextlib import redirect_stdout, redirect_stderr
+    (tmp_path / "d.csv").write_text("zip\n1\n1\n2\n2\n", encoding="utf-8")
+    (tmp_path / "h.csv").write_text("a:b,x\nA,1\nA,2\nB,3\nB,4\n", encoding="utf-8")
+    out, err = io.StringIO(), io.StringIO()
+    with redirect_stdout(out), redirect_stderr(err):
+        code = main(["profile", str(tmp_path / "d.csv"), "--proxy-hints",
+                     "--proxy-hints-with", f"{tmp_path / 'h.csv'}=a:b", "--json"])
+    assert code == 0, err.getvalue()
+    assert "column 'a' not found" not in err.getvalue()
+    import json as _json
+    result = _json.loads(out.getvalue())
+    assert result["provenance"]["proxy_hints_with"][0]["column"] == "a:b"
+    assert "key" not in result["provenance"]["proxy_hints_with"][0]

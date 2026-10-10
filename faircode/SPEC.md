@@ -183,8 +183,13 @@ count is a hard error rather than a silently wrong result - but a same-length fi
 order would still be accepted, so a spec may instead be `PATH=COLUMN:KEY` (#822): rows are then
 matched on the `KEY` column, which must exist in both files and be unique and non-empty in both,
 and every key in the profiled dataset must appear in the held-out file (extra held-out rows are
-ignored). Keys are compared as text. The same form works for `--proxy-hints-with-a/-b`, the MCP
-`held_out_with*` parameters, and a "Join key (optional)" input per row in the web views; the
+ignored). Keys are compared as text. When `COLUMN` itself contains a colon (common in survey
+exports like `race:self_reported`), either backslash-escape the literal colon (`PATH=a\:b`) or
+rely on the fallback (#869): a trailing `:KEY` is only treated as a join key when `KEY` names a
+real column of the profiled dataset - otherwise the whole right-hand side is the held-out column
+name. The web views avoid the ambiguity entirely: column and join key are separate inputs, so a
+column name may contain a colon without escaping. The same form works for `--proxy-hints-with-a/-b`,
+the MCP `held_out_with*` parameters, and a "Join key (optional)" input per row in the web views; the
 recorded provenance entry (section 10) gains a `key` field. Programmatically,
 `proxy_hints(df, dimensions, held_out={"race": pd.Series(...)})` does the same thing directly.
 `compare`'s `--proxy-hints` accepts the same idea per side - `--proxy-hints-with-a PATH=COLUMN`
