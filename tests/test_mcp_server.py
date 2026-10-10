@@ -331,7 +331,7 @@ def test_proxy_hints_returns_a_dict_with_a_hints_key(tmp_path):
 
     result = _proxy_hints_impl(str(path))
 
-    assert list(result) == ["hints"]
+    assert set(result) == {"hints", "provenance"}
     pair = next(h for h in result["hints"] if {h["a"], h["b"]} == {"sex", "occupation"})
     assert pair["p_value"] < 0.05
 
@@ -342,7 +342,8 @@ def test_proxy_hints_with_no_significant_pairs_returns_an_empty_list_not_an_erro
 
     result = _proxy_hints_impl(str(path))
 
-    assert result == {"hints": []}
+    assert result["hints"] == []
+    assert "provenance" in result
 
 
 def test_proxy_hints_runtime_error_propagates_with_a_clean_message(tmp_path, monkeypatch):
@@ -719,3 +720,35 @@ def test_as_format_csv_matches_the_cli_writers_and_rejects_unknown(tmp_path):
     assert _as_format(prof, "json", to_csv) is prof
     with pytest.raises(ValueError, match="format must be"):
         _as_format(prof, "xml", to_csv)
+
+
+def test_proxy_hints_provenance_default_on_and_includes_params_and_held_out(tmp_path):
+    """#860: proxy_hints attaches provenance by default with dataset_hash, params, and held_out."""
+    import hashlib
+
+    p = tmp_path / "data.csv"
+    p.write_text("sex,age\nM,25\nF,30\nM,45\nF,50\n", encoding="utf-8")
+    held = tmp_path / "held.csv"
+    held.write_text("race\nA\nB\nA\nB\n", encoding="utf-8")
+
+    result = _proxy_hints_impl(str(p), held_out_with=[f"{held}=race"], alpha=0.01, correction="holm", overrides={"age": "age"})
+    assert "provenance" in result
+    prov = result["provenance"]
+    assert prov["dataset_hash"] == "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest()
+    assert prov["engine"] == "python"
+    assert prov["params"]["alpha"] == 0.01
+    assert prov["params"]["correction"] == "holm"
+    assert prov["overrides"] == {"age": "age"}
+    assert len(prov["proxy_hints_with"]) == 1
+    assert prov["proxy_hints_with"][0]["column"] == "race"
+    assert prov["proxy_hints_with"][0]["sha256"] == "sha256:" + hashlib.sha256(held.read_bytes()).hexdigest()
+
+
+def test_proxy_hints_include_provenance_false_omits_the_block(tmp_path):
+    """#860: include_provenance=False omits provenance from proxy_hints."""
+    p = tmp_path / "data.csv"
+    p.write_text("sex,age\nM,25\nF,30\n", encoding="utf-8")
+
+    result = _proxy_hints_impl(str(p), include_provenance=False)
+    assert "provenance" not in result
+
