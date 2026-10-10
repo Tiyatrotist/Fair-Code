@@ -54,7 +54,7 @@ def adjust_p_values(p_values, method):
 def _labelize(df, name, kind, max_age=MAX_AGE):
     """Same value normalization the intersection crosstab uses (age → bands)."""
     if kind == "age" and not _looks_like_dates(df[name]):
-        nums, implausible = _age_numbers(df[name], max_age)
+        nums, implausible, *_ = _age_numbers(df[name], max_age)
         if implausible or any(n is not None for n in nums):
             # Non-numeric age sentinels ("unknown", "prefer not to say") get
             # their own categorical label here too, matching _dimension()'s

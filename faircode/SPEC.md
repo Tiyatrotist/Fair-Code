@@ -93,7 +93,7 @@ Age columns come in three shapes - normalize to numeric bands:
   skewness, the intersections and the proxy tests. If every value is implausible the dimension has
   no groups ("not measured").
 - **Interval string** (e.g. `[70-80)`): take the lower bound via the first signed number.
-- **Negative numeric or signed-string sentinel** (e.g. `-1`, `"unknown: -999"`): treat as missing; it must never fall through to the `75+` band.
+- **Negative numeric or signed-string sentinel** (e.g. `-1`, `-9`, `"unknown: -999"`): treat as missing, report under `implausible_values` with a sentinel data-quality flag (#863); it must never fall through to the `75+` band.
 - **Anything else**: treat as categorical (skip numeric handling).
 
 Before numeric normalization, date detection checks a deterministic sample of up to **200**

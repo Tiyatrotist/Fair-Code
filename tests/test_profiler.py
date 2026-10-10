@@ -525,6 +525,17 @@ def test_implausible_ages_are_not_banded_into_the_oldest_group():
     assert any("1 implausible age value(s) above 120" in f for f in result["flags"])
 
 
+def test_negative_sentinel_ages_are_flagged_with_sentinel_message():
+    """#863: negative sentinel ages are counted as implausible/sentinel values."""
+    result = profile(_age_frame([25, -1, 41, -9]))
+    age = _age_dim(result)
+    assert age["implausible_values"] == 2
+    assert age["missing_pct"] == 0.5
+    assert age["has_negative_ages"] is True
+    assert any("2 sentinel/implausible age value(s) (negative or above 120)" in f for f in result["flags"])
+
+
+
 def test_plausible_ages_have_no_implausible_field_or_flag():
     result = profile(_age_frame([25, 30, 41, 80]))
     assert "implausible_values" not in _age_dim(result)
