@@ -565,7 +565,7 @@
   var AGE_NUMERIC_RE = /[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?/;
   var AGE_NONFINITE_RE = /^[+-]?(?:inf(?:inity)?|nan)$/i;
 
-  function ageToNumeric(value) {
+  function rawAgeToNumeric(value) {
     if (value === null || value === undefined) return null;
     var numeric;
     if (typeof value === 'number') numeric = value;
@@ -575,19 +575,28 @@
       if (!m) return null;
       numeric = parseFloat(m[0]);
     }
-    return Number.isFinite(numeric) && numeric >= AGE_BANDS[0] ? numeric : null;
+    return Number.isFinite(numeric) ? numeric : null;
   }
 
-  // Mirrors faircode.profiler._age_numbers (#840): per-cell numeric ages with those
-  // above maxAge removed (null, like a negative one), plus how many there were.
+  function ageToNumeric(value) {
+    var numeric = rawAgeToNumeric(value);
+    return numeric !== null && numeric >= AGE_BANDS[0] ? numeric : null;
+  }
+
+  // Mirrors faircode.profiler._age_numbers (#840, #863): per-cell numeric ages with those
+  // above maxAge or negative removed (null), plus how many there were and if any were negative.
   function ageNumbers(rows, name, maxAge) {
-    var nums = [], implausible = 0;
+    var nums = [], implausible = 0, hasNegative = false;
     for (var i = 0; i < rows.length; i++) {
-      var n = ageToNumeric(rows[i][name]);
-      if (n !== null && n > maxAge) { implausible++; n = null; }
+      var n = rawAgeToNumeric(rows[i][name]);
+      if (n !== null && (n < AGE_BANDS[0] || n > maxAge)) {
+        implausible++;
+        if (n < AGE_BANDS[0]) hasNegative = true;
+        n = null;
+      }
       nums.push(n);
     }
-    return { nums: nums, implausible: implausible };
+    return { nums: nums, implausible: implausible, hasNegative: hasNegative };
   }
 
   function ageBand(num) {
@@ -772,7 +781,10 @@
         }
         var res = analyzeGroups(counts, nTotal, nullCount, skew, minShareThreshold, minGroupSize);
         res.name = name; res.kind = kind;
-        if (parsedAges.implausible) res.implausible_values = parsedAges.implausible;
+        if (parsedAges.implausible) {
+          res.implausible_values = parsedAges.implausible;
+          if (parsedAges.hasNegative) res.has_negative_ages = true;
+        }
         return res;
       }
     }
@@ -1253,9 +1265,15 @@
                    '% of values are missing');
       }
       if (d.implausible_values) {
-        flags.push(d.name + ': ' + d.implausible_values + ' implausible age value(s) above ' +
-                   maxAge + ' were treated as missing, not banded ' +
-                   '(a mistyped age or a birth year?)');
+        if (d.has_negative_ages) {
+          flags.push(d.name + ': ' + d.implausible_values + ' sentinel/implausible age value(s) ' +
+                     '(negative or above ' + maxAge + ') were treated as missing, not banded ' +
+                     '(a mistyped age, birth year, or sentinel code?)');
+        } else {
+          flags.push(d.name + ': ' + d.implausible_values + ' implausible age value(s) above ' +
+                     maxAge + ' were treated as missing, not banded ' +
+                     '(a mistyped age or a birth year?)');
+        }
       }
     });
     inters.forEach(function (inter) {

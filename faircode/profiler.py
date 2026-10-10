@@ -139,8 +139,8 @@ def _looks_like_dates(series) -> bool:
 
 
 
-def _age_to_numeric(value):
-    """Coerce one age cell to a numeric lower-bound, or None."""
+def _raw_age_to_numeric(value):
+    """Coerce one age cell to a finite numeric value, or None."""
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return None
     if isinstance(value, (int, float)):
@@ -150,22 +150,33 @@ def _age_to_numeric(value):
         if match is None:
             return None
         numeric = float(match.group())
-    return numeric if math.isfinite(numeric) and numeric >= AGE_BANDS[0] else None
+    return numeric if math.isfinite(numeric) else None
+
+
+def _age_to_numeric(value):
+    """Coerce one age cell to a numeric lower-bound, or None."""
+    numeric = _raw_age_to_numeric(value)
+    return numeric if numeric is not None and numeric >= AGE_BANDS[0] else None
 
 
 def _age_numbers(values, max_age=MAX_AGE):
     """Per-cell numeric ages with implausible ones removed, plus how many there were.
 
-    An age above `max_age` (150, 200, a mistyped birth year) is a data-quality
-    problem, not a member of the "75+" band: it comes back as None, like a
-    negative one, and is counted in the second return value so the profile can
-    flag it (#840).
+    An age above `max_age` (150, 200, a mistyped birth year) or a negative
+    sentinel (-1, -9) is a data-quality problem, not a valid age band: it
+    comes back as None and is counted in the second return value so the
+    profile can flag it (#840, #863).
     """
-    nums = [_age_to_numeric(v) for v in values]
-    implausible = sum(1 for n in nums if n is not None and n > max_age)
-    if implausible:
-        nums = [None if n is not None and n > max_age else n for n in nums]
-    return nums, implausible
+    raw_nums = [_raw_age_to_numeric(v) for v in values]
+    has_negative = any(n is not None and n < AGE_BANDS[0] for n in raw_nums)
+    implausible = sum(
+        1 for n in raw_nums if n is not None and (n < AGE_BANDS[0] or n > max_age)
+    )
+    nums = [
+        n if (n is not None and AGE_BANDS[0] <= n <= max_age) else None
+        for n in raw_nums
+    ]
+    return nums, implausible, has_negative
 
 
 def _is_categorical_age_sentinel(value) -> bool:
@@ -271,7 +282,7 @@ def _dimension(df: pd.DataFrame, name: str, kind: str,
     skewness = None
 
     if kind == "age" and not _looks_like_dates(col):
-        nums, implausible = _age_numbers(col, max_age)
+        nums, implausible, has_negative = _age_numbers(col, max_age)
         numeric_vals = [n for n in nums if n is not None]
         # Numeric age → bands; if nothing parsed numerically, fall back to raw.
         if numeric_vals or implausible:
@@ -297,6 +308,8 @@ def _dimension(df: pd.DataFrame, name: str, kind: str,
             result.update({"name": name, "kind": kind})
             if implausible:
                 result["implausible_values"] = implausible
+                if has_negative:
+                    result["has_negative_ages"] = True
             return result
 
     # Categorical path (sex, race, geography, generic categorical, non-numeric age).
@@ -330,7 +343,7 @@ def _intersections(df: pd.DataFrame, dims: list[dict],
 
     def labelize(name, kind):
         if kind == "age" and not _looks_like_dates(df[name]):
-            nums, implausible = _age_numbers(df[name], max_age)
+            nums, implausible, *_ = _age_numbers(df[name], max_age)
             if implausible or any(n is not None for n in nums):
                 # Non-numeric age sentinels ("unknown", "prefer not to say")
                 # get their own categorical label here too, matching
@@ -432,11 +445,18 @@ def _build_flags(dimensions: list[dict], intersections: list[dict],
                 f"{d['name']}: {d['missing_pct'] * 100:.1f}% of values are missing"
             )
         if d.get("implausible_values"):
-            flags.append(
-                f"{d['name']}: {d['implausible_values']} implausible age value(s) "
-                f"above {max_age:g} were treated as missing, not banded "
-                f"(a mistyped age or a birth year?)"
-            )
+            if d.get("has_negative_ages"):
+                flags.append(
+                    f"{d['name']}: {d['implausible_values']} sentinel/implausible age value(s) "
+                    f"(negative or above {max_age:g}) were treated as missing, not banded "
+                    f"(a mistyped age, birth year, or sentinel code?)"
+                )
+            else:
+                flags.append(
+                    f"{d['name']}: {d['implausible_values']} implausible age value(s) "
+                    f"above {max_age:g} were treated as missing, not banded "
+                    f"(a mistyped age or a birth year?)"
+                )
     for inter in intersections:
         a, b = inter["dims"]
         for cell in inter["cells"]:

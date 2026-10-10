@@ -364,6 +364,27 @@ def test_python_js_parity_for_implausible_ages(tmp_path):
         assert implausible and implausible == [f for f in js_flags if "implausible age" in f]
 
 
+def test_python_js_parity_for_negative_sentinel_ages(tmp_path):
+    """#863: negative sentinel ages are flagged identically in both engines."""
+    path = tmp_path / "neg_ages.csv"
+    path.write_text("sex,age\n" + "\n".join(
+        f"{'M' if i % 2 else 'F'},{[25, 33, -1, 62, -9, 150, 40, 200][i % 8]}" for i in range(64)) + "\n")
+    opts_file = tmp_path / "opts.json"
+    opts_file.write_text(json.dumps({"overrides": {}, "opts": {}}))
+    python_result = dict(profile(pd.read_csv(path), None, {}))
+    completed = subprocess.run(
+        ["node", "scripts/engine-js.js", "profile", str(path), str(opts_file)],
+        capture_output=True, text=True, encoding="utf-8", check=True)
+    javascript_result = json.loads(completed.stdout)
+    py_flags, js_flags = python_result.pop("flags"), javascript_result.pop("flags")
+    assert javascript_result == python_result
+    age = next(d for d in python_result["dimensions"] if d["name"] == "age")
+    assert age["implausible_values"] == 32
+    assert age["has_negative_ages"] is True
+    sentinel_flags = [f for f in py_flags if "sentinel/implausible age" in f]
+    assert sentinel_flags and sentinel_flags == [f for f in js_flags if "sentinel/implausible age" in f]
+
+
 def test_python_js_parity_for_non_english_column_names(tmp_path):
     """#847: accent-stripped, multilingual keyword detection agrees between engines,
     including the no-kind-detected --map hint."""
